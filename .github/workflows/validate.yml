@@ -1,0 +1,103 @@
+name: Validate repository
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-foundation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            README.md
+            LICENSE
+            CHANGELOG.md
+            CONTRIBUTING.md
+            SECURITY.md
+            CODE_OF_CONDUCT.md
+            AGENTS.md
+            docs/SPEC.md
+            docs/ARCHITECTURE.md
+            docs/ROADMAP.md
+            docs/RELEASE_CHECKLIST.md
+          )
+          for file in "${required[@]}"; do
+            test -s "$file" || { echo "Missing or empty: $file"; exit 1; }
+          done
+
+      - name: Reject unresolved merge markers and machine paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '^(<<<<<<<|=======|>>>>>>>)|/Users/[^/]+/|<owner>' \
+            --exclude-dir=.git --exclude=validate.yml .; then
+            echo "Repository contains a merge marker, machine-specific path, or owner placeholder."
+            exit 1
+          fi
+
+      - name: Reject common credential patterns
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|ntn_[A-Za-z0-9]{20,})' \
+            --exclude-dir=.git --exclude=validate.yml .; then
+            echo "Potential credential detected."
+            exit 1
+          fi
+
+      - name: No instruction may tell an agent to execute a remote document
+        shell: bash
+        run: |
+          set -euo pipefail
+          # An agent reads these files and acts on them with a shell. An
+          # instruction to fetch and run something from a URL is remote code
+          # execution with the blast radius of the user's machine. SECURITY.md
+          # forbids it; this is the check that makes that real.
+          if grep -RInE '(curl|wget|iwr|Invoke-WebRequest)[^|]*\|[[:space:]]*(ba)?sh' \
+            --exclude-dir=.git --exclude=validate.yml . ; then
+            echo "An instruction pipes a download into a shell. See SECURITY.md."
+            exit 1
+          fi
+
+      - name: Claims use the four permitted states
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The README describes a product that does not exist yet. Until it
+          # does, it must say so. This fails if the status line is removed or
+          # weakened before there is something to describe.
+          grep -q 'Status: planned' README.md || {
+            echo "README no longer states that the product is planned."
+            echo "Remove this check only when something is genuinely implemented."
+            exit 1
+          }
+
+      - name: The claim ships with all three of its limits
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The product's honesty rests on three sentences that must travel
+          # together. Publishing the first without the other two turns a
+          # narrow true claim into a wide false one, and it is the kind of
+          # edit that looks like tightening prose.
+          for phrase in \
+            'What is proved' \
+            'What is not proved' \
+            'not representative'
+          do
+            grep -q "$phrase" README.md || {
+              echo "README is missing a required limit: $phrase"
+              echo "See docs/SPEC.md — all three sentences ship together."
+              exit 1
+            }
+          done
