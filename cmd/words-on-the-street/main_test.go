@@ -5,13 +5,21 @@ import (
 	"encoding/json"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestCLIAndMCPMatch_RealBinary(t *testing.T) {
 	// Build the real binary
 	tmpDir := t.TempDir()
-	binPath := filepath.Join(tmpDir, "words-on-the-street")
+	// Windows refuses to exec a path with no extension, so the built binary
+	// must carry .exe there. Without it the test fails with "executable file
+	// not found in %PATH%" while pointing at a file that plainly exists.
+	binName := "words-on-the-street"
+	if runtime.GOOS == "windows" {
+		binName += ".exe"
+	}
+	binPath := filepath.Join(tmpDir, binName)
 
 	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
 	if err := buildCmd.Run(); err != nil {
