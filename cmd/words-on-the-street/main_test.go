@@ -1,61 +1,115 @@
 package main
 
 import (
-	"context"
+	"bufio"
+	"encoding/json"
+	"os/exec"
+	"path/filepath"
 	"testing"
-
-	"github.com/aniklavida/words-on-the-street/internal/app"
-	"github.com/aniklavida/words-on-the-street/internal/evidence"
-	"github.com/aniklavida/words-on-the-street/internal/mcpserver"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
-func TestCLIAndMCPMatch(t *testing.T) {
-	store := &evidence.MemoryStore{}
-	a := &app.App{Store: store}
+func TestCLIAndMCPMatch_RealBinary(t *testing.T) {
+	// Build the real binary
+	tmpDir := t.TempDir()
+	binPath := filepath.Join(tmpDir, "words-on-the-street")
 
-	ctx := context.Background()
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	if err := buildCmd.Run(); err != nil {
+		t.Fatalf("Failed to build binary: %v", err)
+	}
+
 	url := "https://example.com"
 	backend := "echo"
-	args := []string{"hello"}
 
-	// 1. "CLI" path - simulate what main() does
-	cliRec, err := a.Fetch(ctx, backend, args, url, "1.0", false)
+	// CLI path
+	cliCmd := exec.Command(binPath, "fetch", url, backend, "hello", "world")
+	cliOut, err := cliCmd.Output()
 	if err != nil {
-		t.Fatalf("CLI path failed: %v", err)
+		t.Fatalf("CLI failed: %v", err)
 	}
-	cliOutput := string(cliRec.Payload)
+	cliOutput := string(cliOut)
 
-	// 2. "MCP" path - simulate invoking the MCP tool
-	handler := mcpserver.FetchToolHandler(a)
-	
-	req := mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "fetch",
-			Arguments: map[string]interface{}{
-				"url":     url,
-				"backend": backend,
-				"args":    []interface{}{"hello"},
-			},
-		},
-	}
-
-	result, err := handler(ctx, req)
+	// MCP path
+	mcpCmd := exec.Command(binPath, "mcp")
+	stdin, err := mcpCmd.StdinPipe()
 	if err != nil {
-		t.Fatalf("MCP path failed with error: %v", err)
+		t.Fatalf("Failed to get stdin pipe: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("MCP path failed with tool error")
+	stdout, err := mcpCmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("Failed to get stdout pipe: %v", err)
+	}
+
+	if err := mcpCmd.Start(); err != nil {
+		t.Fatalf("Failed to start MCP server: %v", err)
+	}
+
+	// Send initialization request
+	initReq := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}` + "\n"
+	if _, err := stdin.Write([]byte(initReq)); err != nil {
+		t.Fatalf("Failed to write init req: %v", err)
+	}
+
+	scanner := bufio.NewScanner(stdout)
+
+	// Read init response
+	if !scanner.Scan() {
+		t.Fatalf("Failed to read init response")
+	}
+
+	// Send initialized notification
+	initNotif := `{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n"
+	if _, err := stdin.Write([]byte(initNotif)); err != nil {
+		t.Fatalf("Failed to write initialized notif: %v", err)
+	}
+
+	// Send tool call request
+	reqStr := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"fetch","arguments":{"url":"https://example.com","backend":"echo","args":["hello","world"]}}}` + "\n"
+	if _, err := stdin.Write([]byte(reqStr)); err != nil {
+		t.Fatalf("Failed to write tool call req: %v", err)
+	}
+
+	if !scanner.Scan() {
+		t.Fatalf("Failed to read tool call response")
+	}
+
+	respBytes := scanner.Bytes()
+
+	// Close stdin to terminate the server
+	stdin.Close()
+	mcpCmd.Wait()
+
+	// Parse JSON-RPC response
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	if err := json.Unmarshal(respBytes, &resp); err != nil {
+		t.Fatalf("Failed to parse MCP response %q: %v", string(respBytes), err)
+	}
+
+	if resp.Error != nil {
+		t.Fatalf("MCP returned error: %v", resp.Error.Message)
+	}
+
+	if resp.Result.IsError {
+		t.Fatalf("MCP tool returned error")
 	}
 
 	mcpOutput := ""
-	for _, content := range result.Content {
-		if textContent, ok := content.(mcp.TextContent); ok {
-			mcpOutput += textContent.Text
-		}
+	for _, c := range resp.Result.Content {
+		mcpOutput += c.Text
 	}
 
 	if cliOutput != mcpOutput {
-		t.Errorf("Mismatch!\nCLI output: %q\nMCP output: %q", cliOutput, mcpOutput)
+		t.Errorf("Mismatch!\nCLI output (len=%d): %q\nMCP output (len=%d): %q", len(cliOutput), cliOutput, len(mcpOutput), mcpOutput)
 	}
 }

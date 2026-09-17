@@ -11,16 +11,17 @@ import (
 )
 
 // Fetch performs a fetch and records the evidence in one operation.
-// It is impossible to retrieve the payload without the evidence record.
-func Fetch(ctx context.Context, store evidence.Store, backend string, args []string, url string, version string, isFallback bool) (*evidence.Record, error) {
+// It returns the hash of the recorded evidence, making it impossible
+// to retrieve the payload without successfully writing the evidence record first.
+func Fetch(ctx context.Context, store evidence.Store, backend string, args []string, url string, version string, isFallback bool) (string, error) {
 	if store == nil {
-		return nil, fmt.Errorf("store is required")
+		return "", fmt.Errorf("store is required")
 	}
 
 	cmd := exec.CommandContext(ctx, backend, args...)
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("backend fetch failed: %w", err)
+		return "", fmt.Errorf("backend fetch failed: %w", err)
 	}
 
 	hash := fmt.Sprintf("%x", sha256.Sum256(out))
@@ -36,8 +37,8 @@ func Fetch(ctx context.Context, store evidence.Store, backend string, args []str
 	}
 
 	if err := store.Save(rec); err != nil {
-		return nil, fmt.Errorf("failed to save evidence: %w", err)
+		return "", fmt.Errorf("failed to save evidence: %w", err)
 	}
 
-	return rec, nil
+	return hash, nil
 }

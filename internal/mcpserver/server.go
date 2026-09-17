@@ -35,11 +35,17 @@ func FetchToolHandler(a *app.App) server.ToolHandlerFunc {
 			}
 		}
 
-		rec, err := a.Fetch(ctx, backend, args, url, "1.0", false)
+		hash, err := a.Fetch(ctx, backend, args, url, "1.0", false)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
+		rec, err := a.Store.Get(hash)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("evidence discarded: %v", err)), nil
+		}
+
+		// MCP path does not print a trailing newline unless it's in the payload
 		return mcp.NewToolResultText(string(rec.Payload)), nil
 	}
 }

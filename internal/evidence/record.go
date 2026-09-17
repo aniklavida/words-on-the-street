@@ -1,6 +1,9 @@
 package evidence
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Record struct {
 	ResolvedURL string
@@ -14,6 +17,7 @@ type Record struct {
 
 type Store interface {
 	Save(rec *Record) error
+	Get(hash string) (*Record, error)
 }
 
 type MemoryStore struct {
@@ -23,4 +27,13 @@ type MemoryStore struct {
 func (m *MemoryStore) Save(rec *Record) error {
 	m.Records = append(m.Records, rec)
 	return nil
+}
+
+func (m *MemoryStore) Get(hash string) (*Record, error) {
+	for _, rec := range m.Records {
+		if rec.Hash == hash {
+			return rec, nil
+		}
+	}
+	return nil, fmt.Errorf("record not found")
 }

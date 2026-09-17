@@ -11,6 +11,6 @@ type App struct {
 	Store evidence.Store
 }
 
-func (a *App) Fetch(ctx context.Context, backend string, args []string, url string, version string, isFallback bool) (*evidence.Record, error) {
+func (a *App) Fetch(ctx context.Context, backend string, args []string, url string, version string, isFallback bool) (string, error) {
 	return fetch.Fetch(ctx, a.Store, backend, args, url, version, isFallback)
 }

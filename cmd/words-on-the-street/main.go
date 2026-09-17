@@ -25,17 +25,26 @@ func main() {
 	switch command {
 	case "fetch":
 		if len(os.Args) < 4 {
-			fmt.Println("Usage: words-on-the-street fetch <url> <backend>")
+			fmt.Println("Usage: words-on-the-street fetch <url> <backend> [args...]")
 			os.Exit(1)
 		}
 		url := os.Args[2]
 		backend := os.Args[3]
-		rec, err := a.Fetch(context.Background(), backend, nil, url, "1.0", false)
+		args := os.Args[4:]
+
+		hash, err := a.Fetch(context.Background(), backend, args, url, "1.0", false)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println(string(rec.Payload))
+
+		rec, err := a.Store.Get(hash)
+		if err != nil {
+			fmt.Printf("Error retrieving evidence: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Print(string(rec.Payload))
 
 	case "verify":
 		fmt.Println("verify: not implemented")
@@ -58,7 +67,7 @@ func main() {
 			fmt.Println("version: unknown (no build info)")
 			return
 		}
-		
+
 		// Check vcs.revision to see if it was built from a git commit
 		revision := "unknown"
 		modified := false
@@ -75,13 +84,9 @@ func main() {
 			revision += " (modified)"
 		}
 
-		// A signature check isn't standard in go build info, but let's report what we have
 		fmt.Printf("words-on-the-street %s\n", info.Main.Version)
 		fmt.Printf("Build: %s\n", revision)
-		// For signed status, standard Go binaries aren't signed out of the box in a way ReadBuildInfo sees, 
-		// but we can report that it is not signed as a placeholder or check GOEXPERIMENT etc.
-		// Wait, "whether it was signed". I'll just state "Signed: unknown" as a placeholder for foundation.
-		fmt.Printf("Signed: unknown\n")
+		fmt.Printf("Signed: unsupported\n")
 
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
