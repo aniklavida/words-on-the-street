@@ -73,8 +73,8 @@ Consequences, as product requirements:
 
 - The risk is shown **at the point of configuring a session**.
 - A separate account is recommended for the platform that bans permanently.
-- Rate limits are conservative by default and not adjustable upward without an
-  explicit acknowledgement.
+- Rate limits are conservative by default; the user can adjust them, with the
+  risk of raising a limit disclosed once rather than gated on an acknowledgement.
 - A credential never enters the record, the synthesis, the log, or anything the
   agent sees.
 

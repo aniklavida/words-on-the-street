@@ -65,7 +65,8 @@ Storage, redaction at every boundary, conservative rate limits, the risk stated
 at the point of configuration.
 
 *Done when:* removing redaction fails a named test **for each surface
-separately**, and raising a rate limit without acknowledgement is refused.
+separately**, the risk of raising a rate limit is disclosed clearly once when
+the user raises it, and the setting is not blocked.
 
 ## 9 · The sources that need a session
 
