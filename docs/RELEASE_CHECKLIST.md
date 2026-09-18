@@ -29,7 +29,7 @@ been run.
 
 - [ ] A credential-bearing fetch leaves no credential in the record **or** the agent payload — asserted separately, and searched across the whole store.
 - [ ] Removing redaction fails a named test for **each** surface.
-- [ ] Raising a rate limit without acknowledgement is refused.
+- [ ] The risk of raising a rate limit is disclosed to the user when they raise it, and the setting is not blocked.
 - [ ] The configuration flow shows the risk before accepting a credential.
 
 ## Routing
