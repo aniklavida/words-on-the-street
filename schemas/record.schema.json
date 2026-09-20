@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aniklavida/words-on-the-street/schemas/record.schema.json",
+  "title": "EvidenceRecord",
+  "description": "Provenance record capturing fetch metadata, content addressing, and cryptographic integrity.",
+  "type": "object",
+  "required": [
+    "resolved_url",
+    "timestamp",
+    "hash",
+    "backend_name",
+    "is_fallback"
+  ],
+  "properties": {
+    "resolved_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "The resolved target URL with any credentials sanitized and redacted."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The UTC timestamp when the content was fetched."
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hex digest covering the bytes as received before any normalisation."
+    },
+    "backend_name": {
+      "type": "string",
+      "description": "The name of the external backend process that performed the fetch."
+    },
+    "backend_version": {
+      "type": "string",
+      "description": "The version of the external backend process."
+    },
+    "version": {
+      "type": "string",
+      "description": "Backward-compatible alias for backend_version."
+    },
+    "is_fallback": {
+      "type": "boolean",
+      "description": "Whether this fetch used a fallback backend path."
+    },
+    "backend_args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Arguments passed to the backend, with all credentials redacted."
+    },
+    "normalisation": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["name", "hash"],
+      "description": "Metadata for any normalisation performed on the raw bytes."
+    },
+    "record_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Cryptographic hash of the canonical record fields for tamper detection."
+    },
+    "prev_record_hash": {
+      "type": "string",
+      "description": "Cryptographic hash of the preceding record in the append-only ledger chain."
+    }
+  },
+  "additionalProperties": false
+}

@@ -19,7 +19,13 @@ func main() {
 	}
 
 	command := os.Args[1]
-	store := &evidence.MemoryStore{} // Using MemoryStore for foundation
+	var store evidence.Store
+	fileStore, err := evidence.DefaultStore()
+	if err != nil {
+		store = evidence.NewMemoryStore()
+	} else {
+		store = fileStore
+	}
 	a := &app.App{Store: store}
 
 	switch command {
