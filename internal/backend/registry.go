@@ -156,6 +156,10 @@ func (r *Registry) Validate() error {
 
 // DefaultSources defines the shipped default sources and ordered backends as pure DATA.
 // Order within each source slice is the failover order.
+//
+// Which sources ship by default is not settled yet. The set below is provisional
+// and exists so the registry has something real to exercise; changing it is a diff
+// against this map, which is the point of holding it as data rather than as code.
 var DefaultSources = map[string][]Backend{
 	"hacker-news": {
 		{
