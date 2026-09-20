@@ -228,18 +228,21 @@ func TestFetch_HashCoversRawBytesNotNormalised(t *testing.T) {
 	}
 }
 
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+	fmt.Println(`{"opinions": ["public comment one", "public comment two"]}`)
+	os.Exit(0)
+}
+
 func TestFetch_CookieBearingFetchLeavesNoCredentialInStore(t *testing.T) {
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+
 	storeDir := t.TempDir()
 	store, err := evidence.NewFileStore(storeDir)
 	if err != nil {
 		t.Fatalf("NewFileStore failed: %v", err)
-	}
-
-	// Create a mock backend script that returns clean public data without echoing args
-	mockScript := filepath.Join(storeDir, "mock_fetch.sh")
-	scriptContent := "#!/bin/sh\necho '{\"opinions\": [\"public comment one\", \"public comment two\"]}'\n"
-	if err := os.WriteFile(mockScript, []byte(scriptContent), 0755); err != nil {
-		t.Fatalf("failed to create mock backend script: %v", err)
 	}
 
 	// Secret credentials that MUST NOT enter the store anywhere
@@ -258,6 +261,8 @@ func TestFetch_CookieBearingFetchLeavesNoCredentialInStore(t *testing.T) {
 	}
 
 	args := []string{
+		"-test.run=^TestHelperProcess$",
+		"--",
 		"--cookie", "session_id=" + fakeCookieVal,
 		"-H", "Cookie: auth_token=" + fakeCookieVal,
 		"-H", "Authorization: Bearer " + fakeAuthToken,
@@ -267,7 +272,7 @@ func TestFetch_CookieBearingFetchLeavesNoCredentialInStore(t *testing.T) {
 		fakePassword, fakeQueryToken, fakeAPIKey)
 
 	ctx := context.Background()
-	hash, err := Fetch(ctx, store, mockScript, args, urlWithCreds, "1.0", false)
+	hash, err := Fetch(ctx, store, os.Args[0], args, urlWithCreds, "1.0", false)
 	if err != nil {
 		t.Fatalf("Fetch failed: %v", err)
 	}
@@ -297,10 +302,6 @@ func TestFetch_CookieBearingFetchLeavesNoCredentialInStore(t *testing.T) {
 			return walkErr
 		}
 		if info.IsDir() {
-			return nil
-		}
-		// Skip our own mock script
-		if path == mockScript {
 			return nil
 		}
 
