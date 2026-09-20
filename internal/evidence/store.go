@@ -430,6 +430,14 @@ func (m *MemoryStore) Save(rec *Record) error {
 		}
 		recCopy.Normalisation = &normCopy
 	}
+	if len(rec.MissingBackends) > 0 {
+		recCopy.MissingBackends = make([]string, len(rec.MissingBackends))
+		copy(recCopy.MissingBackends, rec.MissingBackends)
+	}
+	if len(rec.BackendAttempts) > 0 {
+		recCopy.BackendAttempts = make([]BackendAttempt, len(rec.BackendAttempts))
+		copy(recCopy.BackendAttempts, rec.BackendAttempts)
+	}
 
 	rawCopy := make([]byte, len(raw))
 	copy(rawCopy, raw)

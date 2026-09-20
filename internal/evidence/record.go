@@ -31,6 +31,13 @@ type NormalisationRecord struct {
 // NormaliseFunc defines a function that transforms raw bytes into normalised bytes.
 type NormaliseFunc func([]byte) ([]byte, error)
 
+// BackendAttempt records the outcome of an individual backend attempt during orchestration or failover.
+type BackendAttempt struct {
+	BackendName string `json:"backend_name"`
+	Status      string `json:"status"`
+	Error       string `json:"error,omitempty"`
+}
+
 // Record is the immutable provenance record for a fetch operation.
 // Every fetch records the resolved URL, UTC timestamp, content hash of the bytes
 // as received before any normalisation, backend name and version, and whether
@@ -48,6 +55,9 @@ type Record struct {
 	BackendArgs       []string             `json:"backend_args,omitempty"`
 	Normalisation     *NormalisationRecord `json:"normalisation,omitempty"`
 	NormalisedPayload []byte               `json:"normalised_payload,omitempty"`
+	BackendStatus     string               `json:"backend_status,omitempty"`
+	MissingBackends   []string             `json:"missing_backends,omitempty"`
+	BackendAttempts   []BackendAttempt     `json:"backend_attempts,omitempty"`
 	RecordHash        string               `json:"record_hash,omitempty"`
 	PrevRecordHash    string               `json:"prev_record_hash,omitempty"`
 }

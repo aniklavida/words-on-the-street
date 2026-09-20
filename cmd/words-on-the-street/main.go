@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 
 	"github.com/aniklavida/words-on-the-street/internal/app"
+	"github.com/aniklavida/words-on-the-street/internal/backend"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
 	"github.com/aniklavida/words-on-the-street/internal/mcpserver"
 	"github.com/mark3labs/mcp-go/server"
@@ -26,19 +27,26 @@ func main() {
 	} else {
 		store = fileStore
 	}
-	a := &app.App{Store: store}
+	reg := backend.DefaultRegistry()
+	a := &app.App{Store: store, Registry: reg}
 
 	switch command {
 	case "fetch":
 		if len(os.Args) < 4 {
-			fmt.Println("Usage: words-on-the-street fetch <url> <backend> [args...]")
+			fmt.Println("Usage: words-on-the-street fetch <url> <backend-or-source> [args...]")
 			os.Exit(1)
 		}
 		url := os.Args[2]
-		backend := os.Args[3]
+		backendOrSource := os.Args[3]
 		args := os.Args[4:]
 
-		hash, err := a.Fetch(context.Background(), backend, args, url, "1.0", false)
+		var hash string
+		if _, isSource := a.Registry.BackendsForSource(backendOrSource); isSource {
+			hash, err = a.FetchSource(context.Background(), backendOrSource, url, args)
+		} else {
+			hash, err = a.Fetch(context.Background(), backendOrSource, args, url, "1.0", false)
+		}
+
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
@@ -57,8 +65,21 @@ func main() {
 		os.Exit(1)
 
 	case "doctor":
-		fmt.Println("doctor: not implemented")
-		os.Exit(1)
+		reports := backend.CheckAllHealth(context.Background(), a.Registry)
+		hasError := false
+		for src, reps := range reports {
+			fmt.Printf("Source %s:\n", src)
+			for _, rep := range reps {
+				fmt.Printf("  - %s: %s (version: %s, range: %s, licence: %s)\n",
+					rep.BackendName, rep.Status, rep.DetectedVersion, rep.DeclaredRange, rep.Licence)
+				if rep.Status != backend.StatusReachable {
+					hasError = true
+				}
+			}
+		}
+		if hasError {
+			os.Exit(1)
+		}
 
 	case "mcp":
 		mcpServer := mcpserver.NewServer(a)

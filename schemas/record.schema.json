@@ -76,6 +76,40 @@
     "prev_record_hash": {
       "type": "string",
       "description": "Cryptographic hash of the preceding record in the append-only ledger chain."
+    },
+    "backend_status": {
+      "type": "string",
+      "description": "Health or availability status of the backend (e.g. reachable, unreachable, wrong-version)."
+    },
+    "missing_backends": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of missing or unreachable backend tools encountered before this fetch succeeded."
+    },
+    "backend_attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "backend_name",
+          "status"
+        ],
+        "properties": {
+          "backend_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Attempts made across backends during failover orchestration."
     }
   },
   "additionalProperties": false
