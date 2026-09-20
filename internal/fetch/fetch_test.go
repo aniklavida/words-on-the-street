@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aniklavida/words-on-the-street/internal/backend"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
 )
 
@@ -232,6 +233,20 @@ func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
+	toolName := os.Getenv("HELPER_TOOL_NAME")
+	if toolName == "" {
+		toolName = "test-tool"
+	}
+	for _, arg := range os.Args {
+		if arg == "--version" {
+			ver := os.Getenv("HELPER_VERSION")
+			if ver == "" {
+				ver = "1.0.0"
+			}
+			fmt.Printf("%s version %s\n", toolName, ver)
+			os.Exit(0)
+		}
+	}
 	fmt.Println(`{"opinions": ["public comment one", "public comment two"]}`)
 	os.Exit(0)
 }
@@ -386,5 +401,212 @@ func TestFetch_RawBytesRetrievableAfterNormalisation(t *testing.T) {
 	// 4. Verify raw bytes were not destroyed or overwritten by normalisation
 	if bytes.Equal(rawFromRecord, rec.NormalisedPayload) {
 		t.Error("raw bytes and normalised payload should be distinct")
+	}
+}
+
+// Done when: 3. A missing backend produces a recorded state that reaches the evidence record,
+// asserted by a named test — not a skip, not a nil.
+func TestMissingBackend_ProducesRecordedStateInEvidenceRecord(t *testing.T) {
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	t.Setenv("HELPER_TOOL_NAME", "fallback-tool")
+	t.Setenv("HELPER_VERSION", "1.0.0")
+
+	storeDir := t.TempDir()
+	store, err := evidence.NewFileStore(storeDir)
+	if err != nil {
+		t.Fatalf("NewFileStore failed: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Scenario 1: Failover orchestration.
+	// Primary backend is missing from PATH. Fallback backend is available.
+	// The missing primary backend must not be silently skipped; its missing state must reach the evidence record.
+	reg := backend.NewRegistry()
+
+	missingPrimary := backend.Backend{
+		Name:         "missing-primary-backend",
+		Command:      "nonexistent-cmd-primary-12345",
+		VersionRange: ">= 1.0.0",
+		Licence:      "MIT",
+	}
+	availableFallback := backend.Backend{
+		Name:         "available-fallback-backend",
+		Command:      os.Args[0],
+		VersionArgs:  []string{"-test.run=^TestHelperProcess$", "--", "--version"},
+		VersionRange: ">= 1.0.0",
+		Licence:      "Apache-2.0",
+	}
+
+	sourceName := "test-failover-source"
+	if err := reg.RegisterSource(sourceName, missingPrimary, availableFallback); err != nil {
+		t.Fatalf("RegisterSource failed: %v", err)
+	}
+
+	url := "https://example.com/failover-test"
+	args := []string{"-test.run=^TestHelperProcess$", "--"}
+
+	hash, err := FetchSource(ctx, store, reg, sourceName, url, args)
+	if err != nil {
+		t.Fatalf("FetchSource failed on failover: %v", err)
+	}
+	if hash == "" {
+		t.Fatal("expected non-empty hash returned by FetchSource")
+	}
+
+	rec, err := store.Get(hash)
+	if err != nil {
+		t.Fatalf("store.Get failed to retrieve record: %v", err)
+	}
+	if rec == nil {
+		t.Fatal("expected non-nil record in store")
+	}
+
+	// Verify failover was taken
+	if !rec.IsFallback {
+		t.Errorf("expected IsFallback to be true, got %v", rec.IsFallback)
+	}
+	if rec.BackendName != "available-fallback-backend" {
+		t.Errorf("expected BackendName %q, got %q", "available-fallback-backend", rec.BackendName)
+	}
+
+	// Constraint: A missing backend is a RECORDED state, never a silent skip. It reaches the evidence record.
+	if len(rec.MissingBackends) == 0 {
+		t.Fatal("expected MissingBackends in record to be populated, got empty slice; missing backend was silently skipped!")
+	}
+	foundMissing := false
+	for _, mb := range rec.MissingBackends {
+		if mb == "missing-primary-backend" {
+			foundMissing = true
+			break
+		}
+	}
+	if !foundMissing {
+		t.Errorf("expected MissingBackends to contain %q, got %v", "missing-primary-backend", rec.MissingBackends)
+	}
+
+	foundAttempt := false
+	for _, att := range rec.BackendAttempts {
+		if att.BackendName == "missing-primary-backend" {
+			foundAttempt = true
+			if att.Status != string(backend.StatusUnreachable) {
+				t.Errorf("expected attempt status %q, got %q", backend.StatusUnreachable, att.Status)
+			}
+		}
+	}
+	if !foundAttempt {
+		t.Errorf("expected BackendAttempts to record missing primary backend, got: %v", rec.BackendAttempts)
+	}
+
+	// Scenario 2: Direct / standalone missing backend.
+	// Fetching with a missing backend produces a recorded state in the evidence record:
+	// not a skip, not a nil.
+	missingToolName := "standalone-nonexistent-tool"
+	missingHash, fetchErr := Fetch(ctx, store, missingToolName, nil, "https://example.com/standalone-missing", "1.0", false)
+	if fetchErr == nil {
+		t.Fatal("expected error fetching with missing backend, got nil")
+	}
+	if missingHash == "" {
+		t.Fatal("expected non-empty record hash for missing backend state, got empty string")
+	}
+
+	missingRec, getErr := store.Get(missingHash)
+	if getErr != nil {
+		t.Fatalf("failed to retrieve recorded missing backend state from store: %v", getErr)
+	}
+	if missingRec == nil {
+		t.Fatal("expected non-nil record for missing backend state in store, got nil")
+	}
+	if missingRec.BackendName != missingToolName {
+		t.Errorf("expected record BackendName %q, got %q", missingToolName, missingRec.BackendName)
+	}
+	if missingRec.BackendStatus != string(backend.StatusUnreachable) {
+		t.Errorf("expected record BackendStatus %q, got %q", backend.StatusUnreachable, missingRec.BackendStatus)
+	}
+}
+
+// Constraint: An unexpected backend version is REPORTED, never silently accepted.
+func TestFetchSource_UnexpectedVersionNeverSilentlyAccepted(t *testing.T) {
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	t.Setenv("HELPER_TOOL_NAME", "outdated-tool")
+	t.Setenv("HELPER_VERSION", "0.4.1") // Below declared range >= 1.0.0
+
+	store := evidence.NewMemoryStore()
+	ctx := context.Background()
+
+	reg := backend.NewRegistry()
+	b := backend.Backend{
+		Name:         "outdated-tool",
+		Command:      os.Args[0],
+		VersionArgs:  []string{"-test.run=^TestHelperProcess$", "--", "--version"},
+		VersionRange: ">= 1.0.0",
+		Licence:      "MIT",
+	}
+
+	sourceName := "strict-source"
+	if err := reg.Register(sourceName, b); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	_, err := FetchSource(ctx, store, reg, sourceName, "https://example.com/item", []string{"-test.run=^TestHelperProcess$", "--"})
+	if err == nil {
+		t.Fatal("expected error for backend with unexpected version, but was silently accepted")
+	}
+
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "outdated-tool") {
+		t.Errorf("expected error to name tool %q, got: %s", "outdated-tool", errMsg)
+	}
+	if !strings.Contains(errMsg, "0.4.1") {
+		t.Errorf("expected error to name detected version %q, got: %s", "0.4.1", errMsg)
+	}
+}
+
+// All backends failing produces an honest failure, never an empty success, and records state.
+func TestFetchSource_AllBackendsFailingProducesHonestFailureWithRecord(t *testing.T) {
+	storeDir := t.TempDir()
+	store, err := evidence.NewFileStore(storeDir)
+	if err != nil {
+		t.Fatalf("NewFileStore failed: %v", err)
+	}
+
+	ctx := context.Background()
+	reg := backend.NewRegistry()
+
+	b1 := backend.Backend{
+		Name:         "missing-first",
+		Command:      "nonexistent-binary-1",
+		VersionRange: ">= 1.0.0",
+		Licence:      "MIT",
+	}
+	b2 := backend.Backend{
+		Name:         "missing-second",
+		Command:      "nonexistent-binary-2",
+		VersionRange: ">= 1.0.0",
+		Licence:      "MIT",
+	}
+
+	sourceName := "all-missing-source"
+	if err := reg.RegisterSource(sourceName, b1, b2); err != nil {
+		t.Fatalf("RegisterSource failed: %v", err)
+	}
+
+	hash, fetchErr := FetchSource(ctx, store, reg, sourceName, "https://example.com/all-fail", nil)
+	if fetchErr == nil {
+		t.Fatal("expected failure when all backends fail, got nil")
+	}
+	if hash == "" {
+		t.Fatal("expected non-empty hash for recorded failure state")
+	}
+
+	rec, err := store.Get(hash)
+	if err != nil {
+		t.Fatalf("expected recorded failure state in store: %v", err)
+	}
+	if rec == nil {
+		t.Fatal("expected non-nil record for failed state")
+	}
+	if len(rec.MissingBackends) != 2 {
+		t.Errorf("expected 2 missing backends in record, got: %v", rec.MissingBackends)
 	}
 }
