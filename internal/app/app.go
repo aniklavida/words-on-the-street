@@ -6,6 +6,7 @@ import (
 	"github.com/aniklavida/words-on-the-street/internal/backend"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
 	"github.com/aniklavida/words-on-the-street/internal/fetch"
+	"github.com/aniklavida/words-on-the-street/internal/verify"
 )
 
 type App struct {
@@ -23,4 +24,10 @@ func (a *App) FetchSource(ctx context.Context, source string, url string, args [
 		reg = backend.DefaultRegistry()
 	}
 	return fetch.FetchSource(ctx, a.Store, reg, source, url, args)
+}
+
+// Verify re-fetches the recorded entry named by recordHash and reports whether
+// the source is identical, changed, or gone.
+func (a *App) Verify(ctx context.Context, recordHash string) (*verify.Result, error) {
+	return verify.Verify(ctx, a.Store, verify.CommandRefetcher{}, recordHash)
 }

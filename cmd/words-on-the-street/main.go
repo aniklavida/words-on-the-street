@@ -61,8 +61,25 @@ func main() {
 		fmt.Print(string(rec.Payload))
 
 	case "verify":
-		fmt.Println("verify: not implemented")
-		os.Exit(1)
+		if len(os.Args) < 3 {
+			fmt.Println("Usage: words-on-the-street verify <record-hash>")
+			os.Exit(1)
+		}
+		result, err := a.Verify(context.Background(), os.Args[2])
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("state: %s\n", result.State)
+		fmt.Printf("original_hash: %s\n", result.OriginalHash)
+		fmt.Printf("original_record_hash: %s\n", result.OriginalRecordHash)
+		if result.CurrentHash != "" {
+			fmt.Printf("current_hash: %s\n", result.CurrentHash)
+		}
+		fmt.Printf("observation_record_hash: %s\n", result.ObservationRecordHash)
+		if result.Diff != "" {
+			fmt.Printf("diff:\n%s", result.Diff)
+		}
 
 	case "doctor":
 		reports := backend.CheckAllHealth(context.Background(), a.Registry)
