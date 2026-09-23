@@ -18,6 +18,10 @@ import (
 type ResolvedRequest struct {
 	URL  string
 	Args []string
+	// BeforeExecute, when set, runs once immediately before the backend is
+	// invoked. It is where a source enforces a rate limit. Resolution stays
+	// side-effect free and no bytes are retrieved until this returns.
+	BeforeExecute func(context.Context) error
 }
 
 // Source turns an opaque query — a search term or an item/thread identifier —
@@ -41,16 +45,19 @@ const (
 	lobstersSearchEndpoint  = "https://lobste.rs/search"
 	lobstersTagEndpoint     = "https://lobste.rs/t/"
 	lobstersHottestEndpoint = "https://lobste.rs/hottest.json"
+	linkedinSearchEndpoint  = "https://www.linkedin.com/search/results/content/"
+	linkedinCompanyEndpoint = "https://www.linkedin.com/company/"
+	linkedinProfileEndpoint = "https://www.linkedin.com/in/"
 )
 
 var (
-	digitsPattern      = regexp.MustCompile(`^[0-9]+$`)
-	lobstersTagPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	digitsPattern       = regexp.MustCompile(`^[0-9]+$`)
+	lobstersTagPattern  = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	linkedinSlugPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 )
 
 // Sources returns the shipped source resolvers keyed by name. Every name here
-// matches a source in backend.DefaultSources, and every endpoint is a public one
-// that needs no credential.
+// matches a source in backend.DefaultSources.
 //
 // Hacker News resolves through its Algolia-backed search API rather than the
 // Firebase API: Algolia serves both a query search and a whole thread from a
@@ -59,10 +66,15 @@ var (
 //
 // Lobsters resolves through the .json suffix its pages already serve: a search, a
 // tag feed, or the hottest feed.
+//
+// LinkedIn resolves public search, company and profile URLs. It requires a
+// session cookie the user supplies themselves (LinkedInCookieEnv); resolution
+// refuses without one, before any backend runs.
 func Sources() map[string]Source {
 	return map[string]Source{
 		"hacker-news": {Name: "hacker-news", Resolve: resolveHackerNews},
 		"lobsters":    {Name: "lobsters", Resolve: resolveLobsters},
+		"linkedin":    {Name: "linkedin", Resolve: resolveLinkedIn},
 	}
 }
 
@@ -109,6 +121,46 @@ func resolveLobsters(query string) (ResolvedRequest, error) {
 	return ResolvedRequest{URL: searchURL, Args: []string{searchURL}}, nil
 }
 
+// resolveLinkedIn turns a query into a LinkedIn URL fetched with the user's own
+// session cookie. It never logs the cookie; the cookie travels only in the
+// backend argument array, where evidence.SanitizeArgs redacts it before the
+// record is written. A fetch is refused, before any backend runs, when no cookie
+// is configured.
+func resolveLinkedIn(query string) (ResolvedRequest, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return ResolvedRequest{}, ErrEmptyQuery
+	}
+
+	cookie, err := LinkedInCookie()
+	if err != nil {
+		return ResolvedRequest{}, err
+	}
+
+	var targetURL string
+	switch {
+	case strings.HasPrefix(strings.ToLower(q), "company:"):
+		slug := strings.TrimSpace(q[len("company:"):])
+		if !linkedinSlugPattern.MatchString(slug) {
+			return ResolvedRequest{}, fmt.Errorf("invalid linkedin company %q", slug)
+		}
+		targetURL = linkedinCompanyEndpoint + slug + "/posts/"
+	case strings.HasPrefix(strings.ToLower(q), "profile:"):
+		slug := strings.TrimSpace(q[len("profile:"):])
+		if !linkedinSlugPattern.MatchString(slug) {
+			return ResolvedRequest{}, fmt.Errorf("invalid linkedin profile %q", slug)
+		}
+		targetURL = linkedinProfileEndpoint + slug + "/"
+	default:
+		targetURL = linkedinSearchEndpoint + "?keywords=" + url.QueryEscape(q)
+	}
+
+	// The cookie is a single header argument. It is redacted by
+	// evidence.SanitizeArgs before any record is written, and never logged here.
+	args := []string{"-H", "Cookie: " + cookie, targetURL}
+	return ResolvedRequest{URL: targetURL, Args: args, BeforeExecute: waitForLinkedInRateLimit}, nil
+}
+
 // FetchQuery resolves a query for a named source and fetches it through the
 // registry, recording evidence in the same operation. An unknown source or a
 // query that does not resolve is refused before any bytes are retrieved.
@@ -120,6 +172,13 @@ func FetchQuery(ctx context.Context, store evidence.Store, reg *backend.Registry
 	req, err := src.Resolve(query)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve %s query %q: %w", source, query, err)
+	}
+	// A source's pre-fetch hook enforces anything that must happen before bytes
+	// are retrieved, such as a rate limit. It runs before the backend can start.
+	if req.BeforeExecute != nil {
+		if err := req.BeforeExecute(ctx); err != nil {
+			return "", fmt.Errorf("failed to prepare %s fetch: %w", source, err)
+		}
 	}
 	return FetchSource(ctx, store, reg, source, req.URL, req.Args)
 }

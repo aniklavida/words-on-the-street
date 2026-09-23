@@ -184,6 +184,20 @@ var DefaultSources = map[string][]Backend{
 			Licence:      "curl",
 		},
 	},
+	// LinkedIn is read only with a session cookie the user supplies themselves
+	// through WORDS_ON_THE_STREET_LINKEDIN_COOKIE. There is no automated login
+	// here: the user brings an already-authenticated session, exactly as a
+	// browser export would.
+	"linkedin": {
+		{
+			Name:         "curl",
+			Command:      "curl",
+			Args:         []string{"-sSL"},
+			VersionArgs:  []string{"--version"},
+			VersionRange: ">= 7.68.0",
+			Licence:      "curl",
+		},
+	},
 	"github": {
 		{
 			Name:         "gh",
