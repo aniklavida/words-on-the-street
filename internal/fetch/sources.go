@@ -38,7 +38,7 @@ var (
 const (
 	hnSearchEndpoint        = "https://hn.algolia.com/api/v1/search"
 	hnItemEndpoint          = "https://hn.algolia.com/api/v1/items/"
-	lobstersSearchEndpoint  = "https://lobste.rs/search.json"
+	lobstersSearchEndpoint  = "https://lobste.rs/search"
 	lobstersTagEndpoint     = "https://lobste.rs/t/"
 	lobstersHottestEndpoint = "https://lobste.rs/hottest.json"
 )
@@ -80,24 +80,33 @@ func resolveHackerNews(query string) (ResolvedRequest, error) {
 	// A bare number is an item id, so a specific thread is addressed directly
 	// instead of guessed at through a search.
 	if digitsPattern.MatchString(q) {
-		return ResolvedRequest{URL: hnItemEndpoint + q}, nil
+		itemURL := hnItemEndpoint + q
+		return ResolvedRequest{URL: itemURL, Args: []string{itemURL}}, nil
 	}
-	return ResolvedRequest{URL: hnSearchEndpoint + "?query=" + url.QueryEscape(q)}, nil
+	searchURL := hnSearchEndpoint + "?query=" + url.QueryEscape(q)
+	return ResolvedRequest{URL: searchURL, Args: []string{searchURL}}, nil
 }
 
 func resolveLobsters(query string) (ResolvedRequest, error) {
 	q := strings.TrimSpace(query)
 	if q == "" || strings.EqualFold(q, "hottest") {
-		return ResolvedRequest{URL: lobstersHottestEndpoint}, nil
+		return ResolvedRequest{URL: lobstersHottestEndpoint, Args: []string{lobstersHottestEndpoint}}, nil
 	}
 	if strings.HasPrefix(strings.ToLower(q), "tag:") {
 		tag := strings.TrimSpace(q[len("tag:"):])
 		if tag == "" || !lobstersTagPattern.MatchString(tag) {
 			return ResolvedRequest{}, fmt.Errorf("invalid lobsters tag %q", tag)
 		}
-		return ResolvedRequest{URL: lobstersTagEndpoint + tag + ".json"}, nil
+		tagURL := lobstersTagEndpoint + tag + ".json"
+		return ResolvedRequest{URL: tagURL, Args: []string{tagURL}}, nil
 	}
-	return ResolvedRequest{URL: lobstersSearchEndpoint + "?q=" + url.QueryEscape(q)}, nil
+	// Lobsters' search action raises ActionController::UnpermittedParameters for
+	// any request that carries an explicit format, so the .json search route
+	// answers every query with "400 Unpermitted query or form parameter". The
+	// site's own search results page is fetched instead; tag and hottest feeds
+	// still use their .json endpoints.
+	searchURL := lobstersSearchEndpoint + "?q=" + url.QueryEscape(q) + "&what=stories&order=newest"
+	return ResolvedRequest{URL: searchURL, Args: []string{searchURL}}, nil
 }
 
 // FetchQuery resolves a query for a named source and fetches it through the

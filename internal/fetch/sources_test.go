@@ -124,7 +124,7 @@ func TestSources_ResolveQueryToConcreteURL(t *testing.T) {
 		{"hacker-news", "go lang", "https://hn.algolia.com/api/v1/search?query=go+lang", false},
 		{"hacker-news", "39123456", "https://hn.algolia.com/api/v1/items/39123456", false},
 		{"hacker-news", "   ", "", true},
-		{"lobsters", "golang", "https://lobste.rs/search.json?q=golang", false},
+		{"lobsters", "golang", "https://lobste.rs/search?q=golang&what=stories&order=newest", false},
 		{"lobsters", "tag:rust", "https://lobste.rs/t/rust.json", false},
 		{"lobsters", "tag:../etc", "", true},
 		{"lobsters", "hottest", "https://lobste.rs/hottest.json", false},
@@ -150,6 +150,10 @@ func TestSources_ResolveQueryToConcreteURL(t *testing.T) {
 			if req.URL != tc.wantURL {
 				t.Errorf("Resolve(%q) = %q, want %q", tc.query, req.URL, tc.wantURL)
 			}
+			if len(req.Args) == 0 || req.Args[len(req.Args)-1] != tc.wantURL {
+				t.Errorf("Resolve(%q) args %v must end with the resolved URL %q so the backend actually fetches it",
+					tc.query, req.Args, tc.wantURL)
+			}
 		})
 	}
 }
@@ -164,7 +168,7 @@ func TestFetchQuery_EachSourceRecordsCompleteEvidence(t *testing.T) {
 		wantURL string
 	}{
 		{"hacker-news", "golang", "https://hn.algolia.com/api/v1/search?query=golang"},
-		{"lobsters", "golang", "https://lobste.rs/search.json?q=golang"},
+		{"lobsters", "golang", "https://lobste.rs/search?q=golang&what=stories&order=newest"},
 	}
 
 	for _, tc := range cases {
@@ -198,6 +202,19 @@ func TestFetchQuery_EachSourceRecordsCompleteEvidence(t *testing.T) {
 			}
 			if rec.ResolvedURL != tc.wantURL {
 				t.Errorf("resolved URL %q, want %q", rec.ResolvedURL, tc.wantURL)
+			}
+			// The recorded URL must be the URL the backend was actually invoked
+			// with; a record naming a URL that was never fetched is a false claim.
+			foundURLArg := false
+			for _, arg := range rec.BackendArgs {
+				if arg == tc.wantURL {
+					foundURLArg = true
+					break
+				}
+			}
+			if !foundURLArg {
+				t.Errorf("backend args %v do not include the resolved URL %q; the recorded URL was never fetched",
+					rec.BackendArgs, tc.wantURL)
 			}
 			if rec.BackendName != fixture.Name {
 				t.Errorf("backend name %q, want %q", rec.BackendName, fixture.Name)
