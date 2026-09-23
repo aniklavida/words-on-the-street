@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/aniklavida/words-on-the-street/internal/backend"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
 	"github.com/aniklavida/words-on-the-street/internal/fetch"
+	"github.com/aniklavida/words-on-the-street/internal/verify"
 )
 
 // TestDashboardHelperBackend is re-executed as a portable fixture backend. It is
@@ -179,22 +181,42 @@ func TestDashboard_StatusMatchesCheckAllStatus(t *testing.T) {
 	}
 }
 
-// Done when: 4. Every route is read-only. A POST to a GET-only route is refused
-// and the store is byte-for-byte unchanged before and after.
+// Done when: 1. Every new route (/fetches, /verifications, /sources, /fetches/{hash},
+// /verifications/{hash}) is registered through the same readOnly wrapper as / and
+// /api/state — a POST to each must return 405, proven by a test that iterates all routes
+// rather than one copy-pasted per route.
 func TestDashboard_RoutesAreReadOnly(t *testing.T) {
 	store := evidence.NewMemoryStore()
-	seed := []byte("seed payload")
+	seedFetch := []byte("seed fetch payload")
+	fetchHash := fmt.Sprintf("%x", sha256.Sum256(seedFetch))
 	if err := store.Save(&evidence.Record{
-		ResolvedURL:    "https://example.com/",
+		ResolvedURL:    "https://example.com/fetch",
 		Timestamp:      time.Now().UTC(),
-		Hash:           fmt.Sprintf("%x", sha256.Sum256(seed)),
+		Hash:           fetchHash,
 		BackendName:    "example",
 		BackendVersion: "1.0.0",
 		Version:        "1.0.0",
-		Payload:        seed,
-		RawPayload:     seed,
+		Payload:        seedFetch,
+		RawPayload:     seedFetch,
+		BackendStatus:  "reachable",
 	}); err != nil {
-		t.Fatalf("failed to seed store: %v", err)
+		t.Fatalf("failed to seed fetch record: %v", err)
+	}
+
+	seedVerify := []byte("seed verify payload")
+	verifyHash := fmt.Sprintf("%x", sha256.Sum256(seedVerify))
+	if err := store.Save(&evidence.Record{
+		ResolvedURL:    "https://example.com/verify",
+		Timestamp:      time.Now().UTC(),
+		Hash:           verifyHash,
+		BackendName:    "example",
+		BackendVersion: "1.0.0",
+		Version:        "1.0.0",
+		Payload:        seedVerify,
+		RawPayload:     seedVerify,
+		BackendStatus:  verify.StatusVerifiedIdentical,
+	}); err != nil {
+		t.Fatalf("failed to seed verification record: %v", err)
 	}
 
 	before, err := store.List()
@@ -205,7 +227,17 @@ func TestDashboard_RoutesAreReadOnly(t *testing.T) {
 	srv := &Server{Records: store}
 	handler := srv.Handler()
 
-	for _, path := range []string{"/", "/api/state"} {
+	routes := []string{
+		"/",
+		"/api/state",
+		"/fetches",
+		"/verifications",
+		"/sources",
+		"/fetches/" + fetchHash,
+		"/verifications/" + verifyHash,
+	}
+
+	for _, path := range routes {
 		getRecorder := httptest.NewRecorder()
 		handler.ServeHTTP(getRecorder, httptest.NewRequest(http.MethodGet, path, nil))
 		if getRecorder.Code != http.StatusOK {
@@ -230,5 +262,358 @@ func TestDashboard_RoutesAreReadOnly(t *testing.T) {
 		if before[i].RecordHash != after[i].RecordHash {
 			t.Fatalf("record %d changed: %s -> %s", i, before[i].RecordHash, after[i].RecordHash)
 		}
+	}
+}
+
+// Done when: 2. An empty evidence store renders a calm empty state on every list
+// page, not an error and not fabricated rows.
+func TestDashboard_EmptyStoreRendersCalmEmptyState(t *testing.T) {
+	store := evidence.NewMemoryStore()
+	srv := &Server{Records: store}
+	handler := srv.Handler()
+
+	pages := []struct {
+		path      string
+		wantEmpty string
+	}{
+		{"/", "No fetches recorded yet."},
+		{"/", "No verifications recorded yet."},
+		{"/fetches", "No fetches recorded yet."},
+		{"/verifications", "No verifications recorded yet."},
+		{"/sources", "No sources registered."},
+	}
+
+	for _, p := range pages {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p.path, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s returned %d, want 200", p.path, rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, p.wantEmpty) {
+			t.Errorf("GET %s body missing calm empty message %q", p.path, p.wantEmpty)
+		}
+	}
+
+	// Verify no fabricated rows in /fetches and /verifications tables
+	for _, path := range []string{"/fetches", "/verifications"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		body := rec.Body.String()
+		if strings.Contains(body, `<a class="table-link"`) {
+			t.Errorf("GET %s rendered fabricated table rows for empty store", path)
+		}
+	}
+}
+
+// Done when: 3. No official brand logo or trademarked icon appears anywhere in
+// the rendered HTML or any committed asset — grep the diff yourself for common
+// brand-name strings used as image references/alt text before claiming this,
+// and say what you checked for in the pull request body.
+func TestDashboard_NoBrandLogosOrTrademarkedIcons(t *testing.T) {
+	store := evidence.NewMemoryStore()
+	seed := []byte("content for logo test")
+	hash := fmt.Sprintf("%x", sha256.Sum256(seed))
+	if err := store.Save(&evidence.Record{
+		ResolvedURL:    "https://example.com/item",
+		Timestamp:      time.Now().UTC(),
+		Hash:           hash,
+		BackendName:    "curl",
+		BackendVersion: "1.0.0",
+		Version:        "1.0.0",
+		Payload:        seed,
+		RawPayload:     seed,
+		BackendStatus:  "reachable",
+	}); err != nil {
+		t.Fatalf("failed to seed store: %v", err)
+	}
+
+	srv := &Server{Records: store, Registry: backend.DefaultRegistry()}
+	handler := srv.Handler()
+
+	paths := []string{"/", "/fetches", "/verifications", "/sources", "/fetches/" + hash}
+
+	// Forbidden patterns: brand marks, logo files, trademarked icon classes, or brand alt tags
+	forbidden := []string{
+		"reddit-logo", "twitter-logo", "github-logo", "google-logo", "youtube-logo",
+		`alt="reddit"`, `alt="twitter"`, `alt="github"`, `alt="google"`, `alt="youtube"`,
+		"logo.svg", "logo.png", "logo.webp", "brand-logo", "brand-icon",
+	}
+
+	for _, p := range paths {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s returned %d, want 200", p, rec.Code)
+		}
+		body := strings.ToLower(rec.Body.String())
+
+		// Ensure no <img> tag is used for brand logos
+		if strings.Contains(body, "<img") {
+			t.Errorf("page %s contains <img> tag, which may introduce external or trademarked images", p)
+		}
+
+		for _, term := range forbidden {
+			if strings.Contains(body, term) {
+				t.Errorf("page %s contains forbidden trademark/logo reference %q", p, term)
+			}
+		}
+
+		// Verify source avatars are rendered using generic class
+		if p == "/sources" || p == "/" {
+			if !strings.Contains(body, "source-avatar") {
+				t.Errorf("page %s does not use generic .source-avatar class", p)
+			}
+		}
+	}
+}
+
+// Done when: 4. The /sources page shows exactly the sources the registry defines
+// — no more, no fewer — proven against a fixture registry with a source count
+// different from the mockup's, asserting the rendered page matches the fixture,
+// not a hardcoded number.
+func TestDashboard_SourcesMatchesRegistry(t *testing.T) {
+	reg := backend.NewRegistry()
+	fixtureSources := []string{"source-one", "source-two", "source-three"}
+
+	for _, name := range fixtureSources {
+		if err := reg.RegisterSource(name, backend.Backend{
+			Name:         "tool-" + name,
+			Command:      "echo",
+			VersionRange: ">= 1.0.0",
+			Licence:      "MIT",
+		}); err != nil {
+			t.Fatalf("failed to register %s: %v", name, err)
+		}
+	}
+
+	srv := &Server{Records: evidence.NewMemoryStore(), Registry: reg}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/sources", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /sources returned %d, want 200", rec.Code)
+	}
+
+	body := rec.Body.String()
+
+	// Assert exactly 3 source cards rendered (mockup had 6)
+	cardPattern := regexp.MustCompile(`class="source-card"`)
+	matches := cardPattern.FindAllString(body, -1)
+	if len(matches) != len(fixtureSources) {
+		t.Fatalf("GET /sources rendered %d source cards, want exactly %d", len(matches), len(fixtureSources))
+	}
+
+	for _, name := range fixtureSources {
+		attr := fmt.Sprintf(`data-source="%s"`, name)
+		if !strings.Contains(body, attr) {
+			t.Errorf("GET /sources missing expected source card %s", attr)
+		}
+	}
+
+	// Assert unconfigured mockup sources are not present
+	for _, unconfigured := range []string{"reddit", "youtube"} {
+		attr := fmt.Sprintf(`data-source="%s"`, unconfigured)
+		if strings.Contains(body, attr) {
+			t.Errorf("GET /sources contains unconfigured mockup source %s", attr)
+		}
+	}
+}
+
+// Done when: 5. A verification's detail page renders Result.Diff with removed
+// and added lines visually distinguished (different CSS classes, at minimum)
+// when state is Changed, and renders no diff section at all when state is
+// Identical or Gone.
+func TestDashboard_VerificationDetailDiff(t *testing.T) {
+	t.Run("state changed renders visual diff", func(t *testing.T) {
+		store := evidence.NewMemoryStore()
+
+		origPayload := []byte("headline: initial version\nbody: untouched content\n")
+		origHash := fmt.Sprintf("%x", sha256.Sum256(origPayload))
+		if err := store.Save(&evidence.Record{
+			ResolvedURL:    "https://example.com/diff-target",
+			Timestamp:      time.Now().UTC().Add(-1 * time.Hour),
+			Hash:           origHash,
+			BackendName:    "fetcher",
+			BackendVersion: "1.0.0",
+			Version:        "1.0.0",
+			Payload:        origPayload,
+			RawPayload:     origPayload,
+			BackendStatus:  "reachable",
+		}); err != nil {
+			t.Fatalf("failed to save original record: %v", err)
+		}
+
+		changedPayload := []byte("headline: modified version\nbody: untouched content\nfooter: new addition\n")
+		changedHash := fmt.Sprintf("%x", sha256.Sum256(changedPayload))
+		if err := store.Save(&evidence.Record{
+			ResolvedURL:    "https://example.com/diff-target",
+			Timestamp:      time.Now().UTC(),
+			Hash:           changedHash,
+			BackendName:    "fetcher",
+			BackendVersion: "1.0.0",
+			Version:        "1.0.0",
+			Payload:        changedPayload,
+			RawPayload:     changedPayload,
+			BackendStatus:  verify.StatusVerifiedChanged,
+		}); err != nil {
+			t.Fatalf("failed to save changed verification record: %v", err)
+		}
+
+		srv := &Server{Records: store}
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/verifications/"+changedHash, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /verifications/%s returned %d, want 200", changedHash, rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, `<div class="diff-container">`) {
+			t.Errorf("expected <div class=\"diff-container\"> in Changed verification page")
+		}
+		if !strings.Contains(body, "diff-line diff-removed") {
+			t.Errorf("expected diff-line diff-removed in Changed verification page")
+		}
+		if !strings.Contains(body, "diff-line diff-added") {
+			t.Errorf("expected diff-line diff-added in Changed verification page")
+		}
+		if !strings.Contains(body, "-headline: initial version") {
+			t.Errorf("expected removed line '-headline: initial version' in diff")
+		}
+		if !strings.Contains(body, "headline: modified version") {
+			t.Errorf("expected added line 'headline: modified version' in diff")
+		}
+	})
+
+	t.Run("state identical renders no diff section", func(t *testing.T) {
+		store := evidence.NewMemoryStore()
+
+		identicalPayload := []byte("identical target content\n")
+		identicalHash := fmt.Sprintf("%x", sha256.Sum256(identicalPayload))
+		if err := store.Save(&evidence.Record{
+			ResolvedURL:    "https://example.com/identical-target",
+			Timestamp:      time.Now().UTC(),
+			Hash:           identicalHash,
+			BackendName:    "fetcher",
+			BackendVersion: "1.0.0",
+			Version:        "1.0.0",
+			Payload:        identicalPayload,
+			RawPayload:     identicalPayload,
+			BackendStatus:  verify.StatusVerifiedIdentical,
+		}); err != nil {
+			t.Fatalf("failed to save identical verification record: %v", err)
+		}
+
+		srv := &Server{Records: store}
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/verifications/"+identicalHash, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /verifications/%s returned %d, want 200", identicalHash, rec.Code)
+		}
+		body := rec.Body.String()
+
+		if strings.Contains(body, `<div class="diff-container">`) {
+			t.Errorf("expected no diff-container element in Identical verification page")
+		}
+		if strings.Contains(body, "diff-line diff-removed") || strings.Contains(body, "diff-line diff-added") {
+			t.Errorf("expected no diff lines in Identical verification page")
+		}
+	})
+
+	t.Run("state gone renders no diff section", func(t *testing.T) {
+		store := evidence.NewMemoryStore()
+
+		gonePayload := []byte("source is gone marker")
+		goneHash := fmt.Sprintf("%x", sha256.Sum256(gonePayload))
+		if err := store.Save(&evidence.Record{
+			ResolvedURL:    "https://example.com/gone-target",
+			Timestamp:      time.Now().UTC(),
+			Hash:           goneHash,
+			BackendName:    "fetcher",
+			BackendVersion: "1.0.0",
+			Version:        "1.0.0",
+			Payload:        gonePayload,
+			RawPayload:     gonePayload,
+			BackendStatus:  string(verify.Gone),
+		}); err != nil {
+			t.Fatalf("failed to save gone record: %v", err)
+		}
+
+		srv := &Server{Records: store}
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/verifications/"+goneHash, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /verifications/%s returned %d, want 200", goneHash, rec.Code)
+		}
+		body := rec.Body.String()
+
+		if strings.Contains(body, `<div class="diff-container">`) {
+			t.Errorf("expected no diff-container element in Gone verification page")
+		}
+		if strings.Contains(body, "diff-line diff-removed") || strings.Contains(body, "diff-line diff-added") {
+			t.Errorf("expected no diff lines in Gone verification page")
+		}
+	})
+}
+
+// TestDashboard_FetchDetail tests that a fetch's detail view renders all sanitized evidence fields
+// and returns 404 for unknown records.
+func TestDashboard_FetchDetail(t *testing.T) {
+	store := evidence.NewMemoryStore()
+	payload := []byte("stored fetch bytes for detail test")
+	hash := fmt.Sprintf("%x", sha256.Sum256(payload))
+	now := time.Now().UTC()
+
+	if err := store.Save(&evidence.Record{
+		ResolvedURL:    "https://example.com/details/test",
+		Timestamp:      now,
+		Hash:           hash,
+		BackendName:    "fetch-engine",
+		BackendVersion: "2.1.0",
+		Version:        "2.1.0",
+		Payload:        payload,
+		RawPayload:     payload,
+		BackendStatus:  "reachable",
+		IsFallback:     true,
+		BackendArgs:    []string{"--timeout=30", "--agent=words"},
+	}); err != nil {
+		t.Fatalf("failed to save fetch record: %v", err)
+	}
+
+	srv := &Server{Records: store}
+	handler := srv.Handler()
+
+	// 1. Success case
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/fetches/"+hash, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /fetches/%s returned %d, want 200", hash, rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, want := range []string{
+		"https://example.com/details/test",
+		"fetch-engine",
+		"fallback",
+		"reachable",
+		"--timeout=30",
+		"--agent=words",
+		hash,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("GET /fetches/%s missing expected field %q", hash, want)
+		}
+	}
+
+	// 2. Not found case
+	rec404 := httptest.NewRecorder()
+	handler.ServeHTTP(rec404, httptest.NewRequest(http.MethodGet, "/fetches/nonexistent-hash", nil))
+	if rec404.Code != http.StatusNotFound {
+		t.Errorf("GET /fetches/nonexistent-hash returned %d, want 404", rec404.Code)
+	}
+
+	recVerify404 := httptest.NewRecorder()
+	handler.ServeHTTP(recVerify404, httptest.NewRequest(http.MethodGet, "/verifications/nonexistent-hash", nil))
+	if recVerify404.Code != http.StatusNotFound {
+		t.Errorf("GET /verifications/nonexistent-hash returned %d, want 404", recVerify404.Code)
 	}
 }
