@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -122,6 +123,226 @@ func TestCLI_FetchSourceEndToEnd_FixtureBackends(t *testing.T) {
 				t.Fatalf("CLI did not return the fetched bytes:\ngot:  %q\nwant: %q", stdout.Bytes(), tc.payload)
 			}
 		})
+	}
+}
+
+// buildCLIBinary compiles the real command into a temporary directory so the
+// tests below exercise the binary end to end rather than internal functions.
+func buildCLIBinary(t *testing.T) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+
+	binName := "words-on-the-street"
+	if runtime.GOOS == "windows" {
+		binName += ".exe"
+	}
+	binPath := filepath.Join(tmpDir, binName)
+
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build binary: %v\n%s", err, out)
+	}
+	return binPath
+}
+
+// cliHelperBackend describes a registry backend whose command is this test
+// binary re-executed as TestCLIHelperProcess. It is portable: no shell script,
+// and it runs identically on Linux, macOS, and Windows.
+func cliHelperBackend(t *testing.T, name string) map[string]any {
+	t.Helper()
+	exe, err := filepath.Abs(os.Args[0])
+	if err != nil {
+		t.Fatalf("failed to resolve test binary path: %v", err)
+	}
+	return map[string]any{
+		"name":          name,
+		"command":       exe,
+		"args":          []string{"-test.run=^TestCLIHelperProcess$", "--"},
+		"version_args":  []string{"-test.run=^TestCLIHelperProcess$", "--", "--version"},
+		"version_range": ">= 1.0.0",
+		"licence":       "MIT",
+	}
+}
+
+// cliMissingBackend describes a backend whose executable does not exist, so its
+// health check fails without touching the network or the filesystem.
+func cliMissingBackend(name, command string) map[string]any {
+	return map[string]any{
+		"name":          name,
+		"command":       command,
+		"version_range": ">= 1.0.0",
+		"licence":       "MIT",
+	}
+}
+
+func writeCLIRegistry(t *testing.T, dir string, doc map[string][]map[string]any) string {
+	t.Helper()
+	data, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("failed to marshal registry: %v", err)
+	}
+	path := filepath.Join(dir, "registry.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("failed to write registry: %v", err)
+	}
+	return path
+}
+
+func writeCLIFixture(t *testing.T, dir string, payload []byte) string {
+	t.Helper()
+	path := filepath.Join(dir, "fixture.json")
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	return path
+}
+
+// cliEnv builds a subprocess environment that points the binary at a fixture
+// registry and a throwaway store. GO_WANT_CLI_HELPER is always set so a helper
+// backend answers a --version health check with a version in range.
+func cliEnv(regPath, storeDir, fixturePath string) []string {
+	return append(os.Environ(),
+		"GO_WANT_CLI_HELPER=1",
+		"CLI_FIXTURE_FILE="+fixturePath,
+		"WORDS_ON_THE_STREET_REGISTRY="+regPath,
+		"WORDS_ON_THE_STREET_STORE="+storeDir,
+	)
+}
+
+func runCLI(t *testing.T, binPath string, env []string, args ...string) ([]byte, []byte, error) {
+	t.Helper()
+	cmd := exec.Command(binPath, args...)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.Bytes(), stderr.Bytes(), err
+}
+
+// Done when: 1. A fixture where the primary backend fails and a fallback
+// succeeds: fetch exits 0, stdout carries the fetched bytes unchanged, and
+// stderr names the skipped backend and the one that served the bytes.
+func TestCLI_FetchFallbackWarnsOnStderrAndKeepsStdoutClean(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+
+	payload := []byte(`{"source":"hacker-news","stories":[1,2]}`)
+	fixturePath := writeCLIFixture(t, tmpDir, payload)
+	regPath := writeCLIRegistry(t, tmpDir, map[string][]map[string]any{
+		"hacker-news": {
+			cliMissingBackend("gh", filepath.Join(tmpDir, "no-such-primary-tool")),
+			cliHelperBackend(t, "curl"),
+		},
+	})
+	storeDir := filepath.Join(tmpDir, "store")
+
+	stdout, stderr, err := runCLI(t, binPath, cliEnv(regPath, storeDir, fixturePath), "fetch", "hacker-news", "golang")
+	if err != nil {
+		t.Fatalf("degraded-but-successful fetch must exit 0, got: %v\nstderr: %s", err, stderr)
+	}
+	if !bytes.Equal(stdout, payload) {
+		t.Fatalf("stdout must be exactly the fetched bytes:\ngot:  %q\nwant: %q", stdout, payload)
+	}
+	if !strings.Contains(string(stderr), "⚠") {
+		t.Errorf("expected a degradation warning on stderr, got: %s", stderr)
+	}
+	for _, want := range []string{"hacker-news", "gh", "curl"} {
+		if !strings.Contains(string(stderr), want) {
+			t.Errorf("warning must name %q, got stderr: %s", want, stderr)
+		}
+	}
+}
+
+// Done when: 2. A fixture where every backend is healthy: no warning on stderr.
+func TestCLI_FetchHealthyPrimaryEmitsNoWarning(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+
+	payload := []byte(`{"source":"hacker-news","stories":[5,6]}`)
+	fixturePath := writeCLIFixture(t, tmpDir, payload)
+	regPath := writeCLIRegistry(t, tmpDir, map[string][]map[string]any{
+		"hacker-news": {cliHelperBackend(t, "curl")},
+	})
+	storeDir := filepath.Join(tmpDir, "store")
+
+	stdout, stderr, err := runCLI(t, binPath, cliEnv(regPath, storeDir, fixturePath), "fetch", "hacker-news", "golang")
+	if err != nil {
+		t.Fatalf("healthy fetch must exit 0, got: %v\nstderr: %s", err, stderr)
+	}
+	if !bytes.Equal(stdout, payload) {
+		t.Fatalf("stdout must be exactly the fetched bytes:\ngot:  %q\nwant: %q", stdout, payload)
+	}
+	if strings.Contains(string(stderr), "⚠") || strings.Contains(string(stderr), "fallback") {
+		t.Errorf("healthy primary fetch must not warn, got stderr: %s", stderr)
+	}
+}
+
+// Done when: 3. The status surface reports a source whose primary is down but
+// which has a working fallback as degraded, distinct from one where every
+// backend is down. This runs live health checks through the real binary.
+func TestCLI_StatusDistinguishesDegradedFromDown(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+
+	fixturePath := writeCLIFixture(t, tmpDir, []byte(`{}`))
+	missing := func(name string) string { return filepath.Join(tmpDir, "no-such-"+name) }
+	regPath := writeCLIRegistry(t, tmpDir, map[string][]map[string]any{
+		"degraded-source": {
+			cliMissingBackend("primary-down", missing("primary-down")),
+			cliHelperBackend(t, "fallback-up"),
+		},
+		"down-source": {
+			cliMissingBackend("first-down", missing("first-down")),
+			cliMissingBackend("second-down", missing("second-down")),
+		},
+		"healthy-source": {cliHelperBackend(t, "primary-up")},
+	})
+	storeDir := filepath.Join(tmpDir, "store")
+
+	stdout, stderr, _ := runCLI(t, binPath, cliEnv(regPath, storeDir, fixturePath), "status")
+	out := string(stdout)
+	for _, want := range []string{
+		"source: degraded-source, status: degraded",
+		"source: down-source, status: down",
+		"source: healthy-source, status: healthy",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status output missing %q; got:\n%s\nstderr: %s", want, out, stderr)
+		}
+	}
+	if !strings.Contains(out, "fallback-up") {
+		t.Errorf("degraded line must name the serving fallback; got:\n%s", out)
+	}
+}
+
+// Done when: 4. A fixture where every backend for a source fails: the error
+// names every attempted backend and its own failure reason, not just the last.
+func TestCLI_FetchAllBackendsFailNamesEveryAttempt(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+
+	missing := func(name string) string { return filepath.Join(tmpDir, "no-such-"+name) }
+	regPath := writeCLIRegistry(t, tmpDir, map[string][]map[string]any{
+		"hacker-news": {
+			cliMissingBackend("missing-first", missing("first")),
+			cliMissingBackend("missing-second", missing("second")),
+		},
+	})
+	storeDir := filepath.Join(tmpDir, "store")
+
+	stdout, stderr, err := runCLI(t, binPath, cliEnv(regPath, storeDir, writeCLIFixture(t, tmpDir, []byte(`{}`))), "fetch", "hacker-news", "golang")
+	if err == nil {
+		t.Fatalf("all backends failing must exit non-zero; stdout: %s", stdout)
+	}
+	combined := string(stdout) + string(stderr)
+	for _, want := range []string{
+		"missing-first (unreachable)",
+		"missing-second (unreachable)",
+	} {
+		if !strings.Contains(combined, want) {
+			t.Errorf("failure must report %q, got:\n%s", want, combined)
+		}
 	}
 }
 

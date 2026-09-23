@@ -610,3 +610,45 @@ func TestFetchSource_AllBackendsFailingProducesHonestFailureWithRecord(t *testin
 		t.Errorf("expected 2 missing backends in record, got: %v", rec.MissingBackends)
 	}
 }
+
+// Done when: 4. When every backend for a source fails, the failure names every
+// backend that was attempted and why each failed, not only the last one.
+func TestFetchSource_AllBackendsFailErrorNamesEveryAttempt(t *testing.T) {
+	store := evidence.NewMemoryStore()
+	ctx := context.Background()
+
+	reg := backend.NewRegistry()
+	b1 := backend.Backend{
+		Name:         "attempt-one",
+		Command:      "nonexistent-binary-one-for-error-test",
+		VersionRange: ">= 1.0.0",
+		Licence:      "MIT",
+	}
+	b2 := backend.Backend{
+		Name:         "attempt-two",
+		Command:      "nonexistent-binary-two-for-error-test",
+		VersionRange: ">= 1.0.0",
+		Licence:      "MIT",
+	}
+
+	sourceName := "error-names-every-attempt"
+	if err := reg.RegisterSource(sourceName, b1, b2); err != nil {
+		t.Fatalf("RegisterSource failed: %v", err)
+	}
+
+	_, err := FetchSource(ctx, store, reg, sourceName, "https://example.com/all-fail", nil)
+	if err == nil {
+		t.Fatal("expected failure when all backends fail, got nil")
+	}
+
+	msg := err.Error()
+	for _, name := range []string{"attempt-one", "attempt-two"} {
+		if !strings.Contains(msg, name) {
+			t.Errorf("failure must name attempted backend %q, got: %s", name, msg)
+		}
+	}
+	// Each backend must carry its own reason, not a single shared last reason.
+	if got := strings.Count(msg, string(backend.StatusUnreachable)); got < 2 {
+		t.Errorf("failure must give a reason for each attempted backend, found %d in: %s", got, msg)
+	}
+}

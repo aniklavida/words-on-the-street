@@ -3,8 +3,10 @@ package fetch
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/aniklavida/words-on-the-street/internal/backend"
@@ -122,6 +124,27 @@ func Fetch(ctx context.Context, store evidence.Store, backendCmd string, args []
 	return rawHash, nil
 }
 
+// allBackendsFailedError names every backend that was attempted for a source,
+// with the reason each one failed, instead of reporting only the last backend
+// and hiding the rest. The attempts passed in are the same ones recorded in the
+// evidence record, so the error the caller sees and the record cannot disagree.
+func allBackendsFailedError(source string, attempts []evidence.BackendAttempt) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "all backends failed for source %q:", source)
+	for _, attempt := range attempts {
+		status := attempt.Status
+		if status == "" {
+			status = "unknown"
+		}
+		reason := attempt.Error
+		if reason == "" {
+			reason = "no error detail recorded"
+		}
+		fmt.Fprintf(&b, "\n  - %s (%s): %s", attempt.BackendName, status, reason)
+	}
+	return errors.New(b.String())
+}
+
 // FetchSource fetches a URL for a registered source by trying its backends in failover order.
 // A missing backend is never silently skipped: its missing state reaches the evidence record.
 // An unexpected backend version is reported and never silently accepted.
@@ -189,7 +212,7 @@ func FetchSource(ctx context.Context, store evidence.Store, reg *backend.Registr
 				if err := store.Save(rec); err != nil {
 					return "", fmt.Errorf("failed to save evidence record for %s backend: %w", report.Status, err)
 				}
-				return rawHash, fmt.Errorf("all backends failed for source %q: backend %q is %s: %s", source, b.Name, report.Status, report.Error)
+				return rawHash, allBackendsFailedError(source, attempts)
 			}
 			continue
 		}
@@ -227,7 +250,7 @@ func FetchSource(ctx context.Context, store evidence.Store, reg *backend.Registr
 					BackendAttempts: attempts,
 				}
 				_ = store.Save(rec)
-				return rawHash, fmt.Errorf("all backends failed for source %q: %w", source, execErr)
+				return rawHash, allBackendsFailedError(source, attempts)
 			}
 			continue
 		}

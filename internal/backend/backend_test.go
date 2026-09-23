@@ -307,6 +307,77 @@ func TestHealthCheck_ReportsStatusAsValue(t *testing.T) {
 	}
 }
 
+// Done when: 3. The live status surface reports a source as degraded when its
+// primary backend is down but a fallback exists, distinct from a source where
+// every backend is down. The check runs health checks rather than reading any
+// past fetch, so this exercises the same code path the CLI status command uses.
+func TestCheckSourceStatus_DistinguishesDegradedFromDown(t *testing.T) {
+	t.Setenv("GO_WANT_BACKEND_HELPER", "1")
+	t.Setenv("HELPER_TOOL_NAME", "status-fixture-tool")
+	t.Setenv("HELPER_VERSION", "1.5.0")
+
+	missingDir := t.TempDir()
+	missing := func(name string) Backend {
+		return Backend{
+			Name:         name,
+			Command:      filepath.Join(missingDir, name+"-not-installed"),
+			VersionRange: ">= 1.0.0",
+			Licence:      "MIT",
+		}
+	}
+	available := func(name string) Backend {
+		return Backend{
+			Name:         name,
+			Command:      os.Args[0],
+			VersionArgs:  []string{"-test.run=^TestBackendHelperProcess$", "--", "--version"},
+			VersionRange: ">= 1.0.0",
+			Licence:      "MIT",
+		}
+	}
+
+	reg := NewRegistry()
+	cases := []struct {
+		source   string
+		backends []Backend
+	}{
+		{"degraded-source", []Backend{missing("primary-down"), available("fallback-up")}},
+		{"down-source", []Backend{missing("first-down"), missing("second-down")}},
+		{"healthy-source", []Backend{available("primary-up")}},
+	}
+	for _, tc := range cases {
+		if err := reg.RegisterSource(tc.source, tc.backends...); err != nil {
+			t.Fatalf("RegisterSource(%q) failed: %v", tc.source, err)
+		}
+	}
+
+	bySource := map[string]SourceStatus{}
+	for _, status := range CheckAllStatus(context.Background(), reg) {
+		bySource[status.Source] = status
+	}
+
+	if got := bySource["healthy-source"].State; got != SourceHealthy {
+		t.Errorf("healthy-source state = %q, want %q", got, SourceHealthy)
+	}
+
+	degraded := bySource["degraded-source"]
+	if degraded.State != SourceDegraded {
+		t.Fatalf("degraded-source state = %q, want %q", degraded.State, SourceDegraded)
+	}
+	if degraded.Primary != "primary-down" {
+		t.Errorf("degraded-source primary = %q, want %q", degraded.Primary, "primary-down")
+	}
+	if degraded.Serving != "fallback-up" {
+		t.Errorf("degraded-source serving = %q, want %q", degraded.Serving, "fallback-up")
+	}
+
+	if got := bySource["down-source"].State; got != SourceDown {
+		t.Errorf("down-source state = %q, want %q", got, SourceDown)
+	}
+	if bySource["down-source"].Serving != "" {
+		t.Errorf("down-source serving = %q, want empty", bySource["down-source"].Serving)
+	}
+}
+
 func TestVersionRange_ParsingAndSatisfaction(t *testing.T) {
 	cases := []struct {
 		rangeStr string
