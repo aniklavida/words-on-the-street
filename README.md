@@ -84,7 +84,7 @@ All three ship together. None is published without the other two.
 
 Some platforms cannot be read at useful depth without a session you supply yourself. Where that is so, the documentation states the risk at the point of configuring it rather than in a footnote: automated access is against those platforms' terms, one of them bans permanently and without warning, and a session cookie grants account access without the password and past two-factor authentication.
 
-A credential never enters the evidence record, the synthesis, the log, or anything the agent sees.
+A credential never enters the evidence record, the synthesis, the log, or anything the agent sees. The LinkedIn source is the first to need a session cookie; its configuration and rate-limit risks are documented in [docs/LINKEDIN.md](docs/LINKEDIN.md).
 
 ## Documentation
 
@@ -92,6 +92,7 @@ A credential never enters the evidence record, the synthesis, the log, or anythi
 - [Architecture](docs/ARCHITECTURE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [LinkedIn source: cookie, risk and rate limits](docs/LINKEDIN.md)
 
 ## Licence
 

@@ -18,6 +18,10 @@ import (
 type ResolvedRequest struct {
 	URL  string
 	Args []string
+	// BeforeExecute, when set, runs once immediately before the backend is
+	// invoked. It is where a source enforces a rate limit. Resolution stays
+	// side-effect free and no bytes are retrieved until this returns.
+	BeforeExecute func(context.Context) error
 }
 
 // Source turns an opaque query — a search term or an item/thread identifier —
@@ -50,12 +54,16 @@ const (
 	twitterStatusEndpoint   = "https://x.com/i/status/"
 	twitterUserEndpoint     = "https://x.com/"
 	twitterSearchEndpoint   = "https://x.com/search"
+	linkedinSearchEndpoint  = "https://www.linkedin.com/search/results/content/"
+	linkedinCompanyEndpoint = "https://www.linkedin.com/company/"
+	linkedinProfileEndpoint = "https://www.linkedin.com/in/"
 )
 
 var (
 	digitsPattern        = regexp.MustCompile(`^[0-9]+$`)
 	lobstersTagPattern   = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 	twitterHandlePattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,15}$`)
+	linkedinSlugPattern  = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 )
 
 // Sources returns the shipped source resolvers keyed by name. Every name here
@@ -76,6 +84,10 @@ var (
 // the way into the record; it is never stored. Live retrieval through this path
 // is experimental, since x.com may serve a JavaScript shell that carries no
 // data server-side.
+//
+// LinkedIn resolves public search, company and profile URLs. It requires a
+// session cookie the user supplies themselves (LinkedInCookieEnv); resolution
+// refuses without one, before any backend runs.
 func Sources() map[string]Source {
 	return map[string]Source{
 		"hacker-news": {Name: "hacker-news", Resolve: resolveHackerNews},
@@ -91,6 +103,7 @@ func Sources() map[string]Source {
 				return TwitterCredentialArgs(cookie)
 			},
 		},
+		"linkedin": {Name: "linkedin", Resolve: resolveLinkedIn},
 	}
 }
 
@@ -169,6 +182,46 @@ func twitterHandleRequest(handle string) (ResolvedRequest, error) {
 	return ResolvedRequest{URL: userURL, Args: []string{userURL}}, nil
 }
 
+// resolveLinkedIn turns a query into a LinkedIn URL fetched with the user's own
+// session cookie. It never logs the cookie; the cookie travels only in the
+// backend argument array, where evidence.SanitizeArgs redacts it before the
+// record is written. A fetch is refused, before any backend runs, when no cookie
+// is configured.
+func resolveLinkedIn(query string) (ResolvedRequest, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return ResolvedRequest{}, ErrEmptyQuery
+	}
+
+	cookie, err := LinkedInCookie()
+	if err != nil {
+		return ResolvedRequest{}, err
+	}
+
+	var targetURL string
+	switch {
+	case strings.HasPrefix(strings.ToLower(q), "company:"):
+		slug := strings.TrimSpace(q[len("company:"):])
+		if !linkedinSlugPattern.MatchString(slug) {
+			return ResolvedRequest{}, fmt.Errorf("invalid linkedin company %q", slug)
+		}
+		targetURL = linkedinCompanyEndpoint + slug + "/posts/"
+	case strings.HasPrefix(strings.ToLower(q), "profile:"):
+		slug := strings.TrimSpace(q[len("profile:"):])
+		if !linkedinSlugPattern.MatchString(slug) {
+			return ResolvedRequest{}, fmt.Errorf("invalid linkedin profile %q", slug)
+		}
+		targetURL = linkedinProfileEndpoint + slug + "/"
+	default:
+		targetURL = linkedinSearchEndpoint + "?keywords=" + url.QueryEscape(q)
+	}
+
+	// The cookie is a single header argument. It is redacted by
+	// evidence.SanitizeArgs before any record is written, and never logged here.
+	args := []string{"-H", "Cookie: " + cookie, targetURL}
+	return ResolvedRequest{URL: targetURL, Args: args, BeforeExecute: waitForLinkedInRateLimit}, nil
+}
+
 // FetchQuery resolves a query for a named source and fetches it through the
 // registry, recording evidence in the same operation. An unknown source or a
 // query that does not resolve is refused before any bytes are retrieved.
@@ -182,12 +235,22 @@ func FetchQuery(ctx context.Context, store evidence.Store, reg *backend.Registry
 		return "", fmt.Errorf("failed to resolve %s query %q: %w", source, query, err)
 	}
 
+	// A source's pre-fetch hook enforces anything that must happen before bytes
+	// are retrieved, such as a rate limit. It runs before the backend can start.
+	// This is LinkedIn's mechanism: the cookie is already baked into req.Args by
+	// Resolve, so only the rate-limit wait happens here.
+	if req.BeforeExecute != nil {
+		if err := req.BeforeExecute(ctx); err != nil {
+			return "", fmt.Errorf("failed to prepare %s fetch: %w", source, err)
+		}
+	}
+
 	args := append([]string(nil), req.Args...)
 	if src.CredentialArgs != nil {
-		// Apply the conservative rate limit before a credential is used. The
-		// credential arguments themselves are only constructed here and are
-		// sanitized by FetchSource, so nothing before the record boundary sees
-		// the cookie.
+		// Twitter's mechanism: the credential is constructed and appended here,
+		// after its own rate limit is applied, rather than being baked into
+		// Resolve's output. The credential arguments themselves are sanitized by
+		// FetchSource, so nothing before the record boundary sees the cookie.
 		if err := credentialRateLimiter(source).Wait(ctx); err != nil {
 			return "", fmt.Errorf("rate limit for %s: %w", source, err)
 		}

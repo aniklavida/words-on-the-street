@@ -52,6 +52,16 @@ func TestSourceHelperProcess(t *testing.T) {
 		}
 	}
 
+	// When set, dump the exact arguments this process received. A test uses this
+	// to prove a credential really was sent to the backend, so that a later
+	// assertion that it is absent from the record is not vacuous.
+	if argsFile := os.Getenv(sourceHelperArgsEnv); argsFile != "" {
+		if err := os.WriteFile(argsFile, []byte(strings.Join(os.Args, "\n")), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+	}
+
 	path := os.Getenv(sourceFixtureEnv)
 	if path == "" {
 		fmt.Fprintln(os.Stderr, sourceFixtureEnv+" is not set")
