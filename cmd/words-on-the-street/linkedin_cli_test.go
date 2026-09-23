@@ -106,3 +106,73 @@ func TestCLI_LinkedInFetchLeavesNoCookieInOutputOrStore(t *testing.T) {
 		t.Fatalf("error scanning store directory: %v", err)
 	}
 }
+
+// Done when: 1. A cookie stored in the keychain is read and used for a fetch,
+// without ever needing the environment variable set.
+// Uses a fake/mock keychain backend file for CI, since a real OS keychain isn't
+// scriptable in an automated test.
+func TestCLI_LinkedInFetchUsesKeychainCookieWithoutEnvironmentVariable(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+	const fakeCookie = "li_at=FAKE-KEYCHAIN-CLI-COOKIE-0000"
+
+	payload := []byte(`{"source":"linkedin","posts":[{"text":"fetched via keychain"}]}`)
+	fixturePath := writeCLIFixture(t, tmpDir, payload)
+	regPath := writeCLIRegistry(t, tmpDir, map[string][]map[string]any{
+		"linkedin": {cliHelperBackend(t, "curl")},
+	})
+	storeDir := filepath.Join(tmpDir, "store")
+	keychainFile := filepath.Join(tmpDir, "keychain.json")
+
+	// Store cookie into keychain using the CLI store command
+	envStore := append(os.Environ(), "WORDS_ON_THE_STREET_TEST_KEYCHAIN="+keychainFile)
+	stdout, stderr, err := runCLI(t, binPath, envStore, "config", "linkedin", "--store", fakeCookie)
+	if err != nil {
+		t.Fatalf("config linkedin --store failed: %v\nstderr: %s", err, stderr)
+	}
+	if strings.Contains(string(stdout)+string(stderr), fakeCookie) {
+		t.Errorf("store command echoed cookie")
+	}
+
+	// Fetch without WORDS_ON_THE_STREET_LINKEDIN_COOKIE set in env
+	envFetch := append(cliEnv(regPath, storeDir, fixturePath),
+		"WORDS_ON_THE_STREET_TEST_KEYCHAIN="+keychainFile,
+		"WORDS_ON_THE_STREET_LINKEDIN_MIN_INTERVAL=0",
+	)
+
+	stdout, stderr, err = runCLI(t, binPath, envFetch, "fetch", "linkedin", "acme")
+	if err != nil {
+		t.Fatalf("linkedin fetch with keychain failed: %v\nstderr: %s", err, stderr)
+	}
+	if !bytes.Equal(stdout, payload) {
+		t.Fatalf("stdout must be exactly the fetched bytes:\ngot:  %q\nwant: %q", stdout, payload)
+	}
+	for _, out := range []string{string(stdout), string(stderr)} {
+		if strings.Contains(out, fakeCookie) {
+			t.Errorf("CLI output contains the cookie")
+		}
+	}
+}
+
+// Done when: 3. The keychain-storage command never prints the cookie value back to
+// stdout/stderr after storing it.
+func TestCLI_ConfigureLinkedInStoreNeverEchoesCookie(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+	const fakeCookie = "li_at=SECRET-LINKEDIN-COOKIE-NEVER-ECHO"
+	keychainFile := filepath.Join(tmpDir, "keychain.json")
+
+	env := append(os.Environ(), "WORDS_ON_THE_STREET_TEST_KEYCHAIN="+keychainFile)
+	stdout, stderr, err := runCLI(t, binPath, env, "config", "linkedin", "--store", fakeCookie)
+	if err != nil {
+		t.Fatalf("config linkedin --store failed: %v\nstderr: %s", err, stderr)
+	}
+
+	combined := string(stdout) + string(stderr)
+	if strings.Contains(combined, fakeCookie) {
+		t.Fatalf("keychain-storage command printed the cookie back to output:\n%s", combined)
+	}
+	if !strings.Contains(combined, "Successfully stored linkedin session cookie in OS keychain.") {
+		t.Errorf("expected success message, got:\n%s", combined)
+	}
+}
