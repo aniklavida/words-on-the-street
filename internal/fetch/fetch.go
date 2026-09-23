@@ -150,27 +150,35 @@ func FetchSource(ctx context.Context, store evidence.Store, reg *backend.Registr
 	for i, b := range backends {
 		isFallback := (i > 0)
 
-		// 1. Check if backend command is available
-		if _, lookErr := exec.LookPath(b.Command); lookErr != nil {
+		// 1-2. Consult the backend's health check before retrieving anything.
+		// CheckHealth verifies the command exists and its detected version falls
+		// inside the declared range, returning a structured report. An unhealthy
+		// or wrong-version backend is reported and never used to fetch bytes.
+		report := b.CheckHealth(ctx)
+		if report.Status != backend.StatusReachable {
 			attempts = append(attempts, evidence.BackendAttempt{
 				BackendName: b.Name,
-				Status:      string(backend.StatusUnreachable),
-				Error:       lookErr.Error(),
+				Status:      string(report.Status),
+				Error:       report.Error,
 			})
 			missingBackends = append(missingBackends, b.Name)
 
-			// If this was the final backend in failover order, record the missing state in store
+			// If this was the final backend in failover order, record the failed state in store
 			if i == len(backends)-1 {
-				payload := []byte(fmt.Sprintf("all backends failed for source %q; backend %q is missing: %v", source, b.Name, lookErr))
+				payload := []byte(fmt.Sprintf("all backends failed for source %q; backend %q is %s: %s", source, b.Name, report.Status, report.Error))
 				rawHash := fmt.Sprintf("%x", sha256.Sum256(payload))
+				version := report.DetectedVersion
+				if version == "" {
+					version = string(report.Status)
+				}
 				rec := &evidence.Record{
 					ResolvedURL:     cleanURL,
 					Timestamp:       time.Now().UTC(),
 					Hash:            rawHash,
 					BackendName:     b.Name,
-					BackendVersion:  "missing",
-					Version:         "missing",
-					BackendStatus:   string(backend.StatusUnreachable),
+					BackendVersion:  version,
+					Version:         version,
+					BackendStatus:   string(report.Status),
 					IsFallback:      isFallback,
 					Payload:         payload,
 					RawPayload:      payload,
@@ -179,52 +187,14 @@ func FetchSource(ctx context.Context, store evidence.Store, reg *backend.Registr
 					BackendAttempts: attempts,
 				}
 				if err := store.Save(rec); err != nil {
-					return "", fmt.Errorf("failed to save evidence record for missing backend: %w", err)
+					return "", fmt.Errorf("failed to save evidence record for %s backend: %w", report.Status, err)
 				}
-				return rawHash, fmt.Errorf("all backends failed for source %q: backend %q is missing: %w", source, b.Name, lookErr)
+				return rawHash, fmt.Errorf("all backends failed for source %q: backend %q is %s: %s", source, b.Name, report.Status, report.Error)
 			}
 			continue
 		}
 
-		// 2. Detect version and validate against declared version range
-		detectedVer, verErr := b.DetectVersion(ctx)
-		if verErr != nil {
-			attempts = append(attempts, evidence.BackendAttempt{
-				BackendName: b.Name,
-				Status:      string(backend.StatusUnreachable),
-				Error:       verErr.Error(),
-			})
-			missingBackends = append(missingBackends, b.Name)
-
-			if i == len(backends)-1 {
-				payload := []byte(fmt.Sprintf("all backends failed for source %q; backend %q version check failed: %v", source, b.Name, verErr))
-				rawHash := fmt.Sprintf("%x", sha256.Sum256(payload))
-				rec := &evidence.Record{
-					ResolvedURL:     cleanURL,
-					Timestamp:       time.Now().UTC(),
-					Hash:            rawHash,
-					BackendName:     b.Name,
-					BackendVersion:  "unreachable",
-					Version:         "unreachable",
-					BackendStatus:   string(backend.StatusUnreachable),
-					IsFallback:      isFallback,
-					Payload:         payload,
-					RawPayload:      payload,
-					BackendArgs:     evidence.SanitizeArgs(args),
-					MissingBackends: missingBackends,
-					BackendAttempts: attempts,
-				}
-				_ = store.Save(rec)
-				return rawHash, fmt.Errorf("all backends failed for source %q: %w", source, verErr)
-			}
-			continue
-		}
-
-		// Check version constraint
-		// Constraint: Unexpected backend version is REPORTED, never silently accepted.
-		if valErr := backend.ValidateVersion(b.Name, detectedVer, b.VersionRange); valErr != nil {
-			return "", valErr
-		}
+		detectedVer := report.DetectedVersion
 
 		// 3. Execute backend command with argument array
 		cmdArgs := append([]string(nil), b.Args...)

@@ -2,8 +2,11 @@ package backend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -218,4 +221,40 @@ func DefaultRegistry() *Registry {
 		_ = reg.RegisterSource(src, backends...)
 	}
 	return reg
+}
+
+// LoadRegistry decodes a registry document mapping source names to ordered
+// backend lists, validates every entry, and constructs the Registry. The set of
+// sources and backends is data, so it can be replaced without changing control
+// flow: a caller points this at a document describing the backends available on
+// its own machine.
+func LoadRegistry(r io.Reader) (*Registry, error) {
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+
+	var sources map[string][]Backend
+	if err := dec.Decode(&sources); err != nil {
+		return nil, fmt.Errorf("failed to decode registry document: %w", err)
+	}
+
+	reg := NewRegistry()
+	for src, backends := range sources {
+		if err := reg.RegisterSource(src, backends...); err != nil {
+			return nil, fmt.Errorf("invalid backend for source %q: %w", src, err)
+		}
+	}
+	if err := reg.Validate(); err != nil {
+		return nil, err
+	}
+	return reg, nil
+}
+
+// LoadRegistryFile reads and validates a registry document from a file path.
+func LoadRegistryFile(path string) (*Registry, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open registry file: %w", err)
+	}
+	defer f.Close()
+	return LoadRegistry(f)
 }
