@@ -458,3 +458,92 @@ func TestCLIAndMCPMatch_RealBinary(t *testing.T) {
 		t.Errorf("Mismatch!\nCLI output (len=%d): %q\nMCP output (len=%d): %q", len(cliOutput), cliOutput, len(mcpOutput), mcpOutput)
 	}
 }
+
+// Done when: 3. The ban-risk disclosure is plain text at the CLI, at the point
+// the user learns how to configure the session cookie, and it names what a
+// cookie is and what the platform does to accounts that use one this way.
+func TestCLI_ConfigureTwitterShowsBanRiskDisclosure(t *testing.T) {
+	binPath := buildCLIBinary(t)
+
+	stdout, stderr, err := runCLI(t, binPath, os.Environ(), "configure", "twitter")
+	if err != nil {
+		t.Fatalf("configure twitter must exit 0, got: %v\nstderr: %s", err, stderr)
+	}
+
+	// The disclosure is wrapped for a terminal, so compare on collapsed
+	// whitespace; the wording is what matters, not where the line breaks fall.
+	output := strings.Join(strings.Fields(string(stdout)+string(stderr)), " ")
+	for _, want := range []string{
+		"against Twitter/X's terms",
+		"without the password",
+		"past two-factor authentication",
+		"bans accounts permanently and without warning",
+		"separate account",
+		"WORDS_ON_THE_STREET_TWITTER_COOKIE",
+		"never written to an evidence record",
+		"WORDS_ON_THE_STREET_TWITTER_RATE_LIMIT",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("disclosure must contain %q; got:\n%s", want, output)
+		}
+	}
+}
+
+// Done when: 2 and 4. Run the real binary end to end for the twitter source
+// with a fake cookie. The cookie is sent to the backend, yet it appears nowhere
+// in stdout, stderr, or any file the evidence store wrote, and the fetched
+// bytes still reach stdout unchanged.
+func TestCLI_TwitterCookieNeverAppearsInOutputOrStore(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+
+	// An obviously-fake placeholder, never a real credential.
+	const cookie = "fake-cli-twitter-cookie-not-real-1234567890"
+
+	payload := []byte(`{"tweet":"the bytes the backend served"}`)
+	fixturePath := writeCLIFixture(t, tmpDir, payload)
+	regPath := writeCLIRegistry(t, tmpDir, map[string][]map[string]any{
+		"twitter": {cliHelperBackend(t, "curl")},
+	})
+	storeDir := filepath.Join(tmpDir, "store")
+
+	env := append(cliEnv(regPath, storeDir, fixturePath),
+		"WORDS_ON_THE_STREET_TWITTER_COOKIE="+cookie,
+		"WORDS_ON_THE_STREET_TWITTER_RATE_LIMIT=60000",
+	)
+
+	stdout, stderr, err := runCLI(t, binPath, env, "fetch", "twitter", "golang")
+	if err != nil {
+		t.Fatalf("fetch twitter failed: %v\nstderr: %s", err, stderr)
+	}
+	if !bytes.Equal(stdout, payload) {
+		t.Fatalf("stdout must be exactly the fetched bytes:\ngot:  %q\nwant: %q", stdout, payload)
+	}
+	if strings.Contains(string(stdout)+string(stderr), cookie) {
+		t.Fatalf("CLI output leaked the cookie:\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+
+	scanned := 0
+	if err := filepath.Walk(storeDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		scanned++
+		if bytes.Contains(data, []byte(cookie)) {
+			t.Errorf("store file %s contains the cookie", path)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("error scanning store: %v", err)
+	}
+	if scanned == 0 {
+		t.Fatal("no evidence files were scanned")
+	}
+}
