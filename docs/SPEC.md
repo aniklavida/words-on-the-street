@@ -124,7 +124,9 @@ This falls out of the evidence store almost for free, which is exactly why it
 needs a boundary. **For v1.0: a manual re-run reporting differences. No
 scheduling, no notifications, no background process.** The moment it grows a
 daemon it is a different product with different operational questions, and v1.0
-is not the place to discover that.
+is not the place to discover that. (The local dashboard in scope below is a
+foreground `serve` process a user starts and stops, not a scheduled watch
+daemon.)
 
 ## The claim, and its three limits
 
@@ -147,11 +149,36 @@ All three ship together.
 **In:** routing with per-source trust weighting; four to six sources chosen for
 demonstrable difference rather than coverage count; the evidence record;
 `verify`; `watch` as a manual re-run; credential handling with the safeguards
-above; `doctor`; CLI and MCP.
+above; `doctor`; CLI and MCP; a local, read-only dashboard served by the binary
+on loopback only.
 
-**Explicitly out:** competing on source count; any scraping implemented here; a
-hosted anything; bypassing access controls; sentiment scoring presented as
-objective; scheduling or background processes.
+**Local dashboard (in scope — a deliberate reversal).** An earlier version of
+this document put "a hosted anything" and "scheduling or background processes"
+explicitly out. The project owner has reversed that for one narrow case: the
+binary is already running, so the same process can also answer an HTTP request
+on the same machine, the way Prometheus and other self-hosted tools expose their
+own state. `words-on-the-street serve` shows recent recorded fetches, recent
+verification observations, and the live backend status computed by the same
+health checks `doctor` and `status` use.
+
+What it explicitly is **not**:
+
+- **Not a hosted service.** It runs on your machine and nowhere else.
+- **Not reachable beyond localhost.** It binds to `127.0.0.1` (or another
+  loopback address) and refuses any other bind address.
+- **Not multi-user, not authenticated.** There is no login and nothing to log
+  in to; remote access is out of scope precisely because there is no account
+  model and no access control to bypass.
+- **Not a source of new data.** Every route is read-only. No route fetches,
+  verifies, or writes anything; it only renders the local evidence store.
+
+The page refreshes by reload when a browser is open. Live push is **planned**,
+not implemented.
+
+**Explicitly out:** competing on source count; any scraping implemented here;
+bypassing access controls; sentiment scoring presented as objective; a hosted or
+remote service; multi-user operation; scheduled or unattended background
+operation beyond a user-run `serve` process.
 
 ## Differentiation
 

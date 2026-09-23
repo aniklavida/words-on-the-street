@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime/debug"
 	"strings"
 
 	"github.com/aniklavida/words-on-the-street/internal/app"
 	"github.com/aniklavida/words-on-the-street/internal/backend"
+	"github.com/aniklavida/words-on-the-street/internal/dashboard"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
 	"github.com/aniklavida/words-on-the-street/internal/mcpserver"
 	"github.com/mark3labs/mcp-go/server"
@@ -152,6 +155,32 @@ func main() {
 		mcpServer := mcpserver.NewServer(a)
 		if err := server.ServeStdio(mcpServer); err != nil {
 			fmt.Printf("MCP error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "serve":
+		// The dashboard is a separate command rather than a flag on `mcp` because
+		// `mcp` owns stdout for the JSON-RPC stdio transport; an HTTP server that
+		// logs or renders on the same stream would corrupt it. A caller that wants
+		// both runs the two commands side by side.
+		lister, ok := store.(evidence.Lister)
+		if !ok {
+			fmt.Println("Error: the configured evidence store cannot be listed")
+			os.Exit(1)
+		}
+		addr := dashboard.DefaultAddr
+		if len(os.Args) >= 3 {
+			addr = os.Args[2]
+		}
+		ln, err := dashboard.Listen(addr)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		dash := &dashboard.Server{Records: lister, Registry: a.Registry}
+		fmt.Fprintf(os.Stderr, "Dashboard listening on http://%s (loopback only, read-only)\n", ln.Addr())
+		if err := http.Serve(ln, dash.Handler()); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			fmt.Printf("Dashboard error: %v\n", err)
 			os.Exit(1)
 		}
 

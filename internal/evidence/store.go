@@ -24,6 +24,15 @@ type RawStore interface {
 	VerifyIntegrity() error
 }
 
+// Lister enumerates the records already in the store, oldest first, without
+// mutating anything. It is a read-only capability kept separate from Store so a
+// caller that only fetches need not provide it. The local dashboard depends on
+// it to show recent fetches and verification observations; it never fetches,
+// verifies, or writes.
+type Lister interface {
+	List() ([]*Record, error)
+}
+
 // FileStore is an append-only, content-addressed on-disk store for evidence records and payloads.
 type FileStore struct {
 	dir      string
@@ -221,6 +230,19 @@ func (s *FileStore) Get(hash string) (*Record, error) {
 	}
 
 	return &rec, nil
+}
+
+// List returns every recorded entry in append order (oldest first). It is a
+// pure read: it never writes, verifies, or re-fetches anything.
+func (s *FileStore) List() ([]*Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entries, err := s.readLedgerEntries()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list records: %w", err)
+	}
+	return entries, nil
 }
 
 // GetRaw retrieves the content-addressed raw payload bytes, verifying integrity.
@@ -485,6 +507,24 @@ func (m *MemoryStore) Get(hash string) (*Record, error) {
 		res.Version = res.BackendVersion
 	}
 	return &res, nil
+}
+
+// List returns every recorded entry in append order (oldest first). It is a
+// pure read: it never writes, verifies, or re-fetches anything.
+func (m *MemoryStore) List() ([]*Record, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	out := make([]*Record, 0, len(m.chain))
+	for _, hash := range m.chain {
+		rec, ok := m.records[hash]
+		if !ok {
+			continue
+		}
+		cp := *rec
+		out = append(out, &cp)
+	}
+	return out, nil
 }
 
 // GetRaw retrieves raw bytes from memory.

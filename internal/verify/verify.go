@@ -39,6 +39,17 @@ const (
 	Gone State = "gone"
 )
 
+// ObservationStatus values are written to the BackendStatus field of the
+// observation record a verification saves. They are exported so a reader of the
+// evidence store (such as the local dashboard) can tell a verification
+// observation from an ordinary fetch without recomputing the comparison.
+const (
+	// StatusVerifiedIdentical marks an observation whose bytes matched the record.
+	StatusVerifiedIdentical = "verified-identical"
+	// StatusVerifiedChanged marks an observation whose bytes differed.
+	StatusVerifiedChanged = "verified-changed"
+)
+
 // Result is the structured report of a verification.
 type Result struct {
 	State                 State     `json:"state"`
@@ -120,13 +131,13 @@ func Verify(ctx context.Context, store evidence.Store, refetcher Refetcher, orig
 	}
 
 	result.CurrentHash = hashBytes(current)
-	status := "verified-identical"
+	status := StatusVerifiedIdentical
 	if bytes.Equal(original.RawBytes(), current) {
 		result.State = Identical
 	} else {
 		result.State = Changed
 		result.Diff = lineDiff(original.RawBytes(), current)
-		status = "verified-changed"
+		status = StatusVerifiedChanged
 	}
 
 	observationHash, err := recordObservation(store, original, current, checkedAt, status)
