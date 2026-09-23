@@ -27,24 +27,35 @@ func main() {
 	} else {
 		store = fileStore
 	}
-	reg := backend.DefaultRegistry()
-	a := &app.App{Store: store, Registry: reg}
+	a := &app.App{Store: store, Registry: loadRegistry()}
 
 	switch command {
 	case "fetch":
-		if len(os.Args) < 4 {
-			fmt.Println("Usage: words-on-the-street fetch <url> <backend-or-source> [args...]")
+		if len(os.Args) < 3 {
+			fmt.Println("Usage: words-on-the-street fetch <source> <query>")
+			fmt.Println("       words-on-the-street fetch <url> <backend> [args...]")
 			os.Exit(1)
 		}
-		url := os.Args[2]
-		backendOrSource := os.Args[3]
-		args := os.Args[4:]
 
 		var hash string
-		if _, isSource := a.Registry.BackendsForSource(backendOrSource); isSource {
-			hash, err = a.FetchSource(context.Background(), backendOrSource, url, args)
+		if _, isSource := a.Registry.BackendsForSource(os.Args[2]); isSource {
+			// Source form: resolve the query, then fetch and record through the
+			// source's registered backends.
+			if len(os.Args) < 4 {
+				fmt.Printf("Usage: words-on-the-street fetch %s <query>\n", os.Args[2])
+				os.Exit(1)
+			}
+			hash, err = a.FetchQuery(context.Background(), os.Args[2], os.Args[3])
 		} else {
-			hash, err = a.Fetch(context.Background(), backendOrSource, args, url, "1.0", false)
+			// Explicit form: a URL and a named backend, with optional extra args.
+			if len(os.Args) < 4 {
+				fmt.Println("Usage: words-on-the-street fetch <url> <backend> [args...]")
+				os.Exit(1)
+			}
+			url := os.Args[2]
+			backendName := os.Args[3]
+			args := os.Args[4:]
+			hash, err = a.Fetch(context.Background(), backendName, args, url, "1.0", false)
 		}
 
 		if err != nil {
@@ -58,6 +69,10 @@ func main() {
 			os.Exit(1)
 		}
 
+		// The record hash goes to stderr so stdout stays exactly the fetched
+		// bytes; anything piping the payload is unaffected, and a caller that
+		// wants to re-check the fetch has the identifier to do it.
+		fmt.Fprintf(os.Stderr, "record: %s\n", hash)
 		fmt.Print(string(rec.Payload))
 
 	case "verify":
@@ -136,4 +151,21 @@ func main() {
 		fmt.Printf("Unknown command: %s\n", command)
 		os.Exit(1)
 	}
+}
+
+// loadRegistry returns the shipped default sources, or the registry described by
+// the WORDS_ON_THE_STREET_REGISTRY document when that is set. The registry is
+// data, so a machine can point at the backends it actually has without a code
+// change.
+func loadRegistry() *backend.Registry {
+	path := os.Getenv("WORDS_ON_THE_STREET_REGISTRY")
+	if path == "" {
+		return backend.DefaultRegistry()
+	}
+	reg, err := backend.LoadRegistryFile(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to load registry from %q: %v\n", path, err)
+		os.Exit(1)
+	}
+	return reg
 }

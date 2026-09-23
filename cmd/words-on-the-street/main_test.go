@@ -2,12 +2,128 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 )
+
+// TestCLIHelperProcess is re-executed by the built CLI as a portable fixture
+// backend. It serves the bytes held in CLI_FIXTURE_FILE, so the CLI can be run
+// end to end without touching the network and without a shell script that would
+// break on Windows.
+func TestCLIHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_CLI_HELPER") != "1" {
+		return
+	}
+	for _, arg := range os.Args {
+		if arg == "--version" {
+			fmt.Println("cli-fixture version 1.0.0")
+			os.Exit(0)
+		}
+	}
+
+	path := os.Getenv("CLI_FIXTURE_FILE")
+	if path == "" {
+		fmt.Fprintln(os.Stderr, "CLI_FIXTURE_FILE is not set")
+		os.Exit(2)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	os.Stdout.Write(data)
+	os.Exit(0)
+}
+
+// Done when: 3. The CLI command runs end to end against fixture backends through
+// the real registry and store — this invokes the built binary, not internals.
+func TestCLI_FetchSourceEndToEnd_FixtureBackends(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	binName := "words-on-the-street"
+	if runtime.GOOS == "windows" {
+		binName += ".exe"
+	}
+	binPath := filepath.Join(tmpDir, binName)
+
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build binary: %v\n%s", err, out)
+	}
+
+	exe, err := filepath.Abs(os.Args[0])
+	if err != nil {
+		t.Fatalf("failed to resolve test binary path: %v", err)
+	}
+
+	backendDoc := func() map[string]any {
+		return map[string]any{
+			"name":          exe,
+			"command":       exe,
+			"args":          []string{"-test.run=^TestCLIHelperProcess$", "--"},
+			"version_args":  []string{"-test.run=^TestCLIHelperProcess$", "--", "--version"},
+			"version_range": ">= 1.0.0",
+			"licence":       "MIT",
+		}
+	}
+	regDoc := map[string][]map[string]any{
+		"hacker-news": {backendDoc()},
+		"lobsters":    {backendDoc()},
+	}
+	regBytes, err := json.Marshal(regDoc)
+	if err != nil {
+		t.Fatalf("failed to marshal registry: %v", err)
+	}
+	regPath := filepath.Join(tmpDir, "registry.json")
+	if err := os.WriteFile(regPath, regBytes, 0o644); err != nil {
+		t.Fatalf("failed to write registry: %v", err)
+	}
+
+	cases := []struct {
+		source  string
+		payload []byte
+	}{
+		{"hacker-news", []byte(`{"source":"hacker-news","stories":[1,2]}`)},
+		{"lobsters", []byte(`{"source":"lobsters","stories":[3,4]}`)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.source, func(t *testing.T) {
+			sourceDir := filepath.Join(tmpDir, tc.source)
+			if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+				t.Fatalf("failed to create source dir: %v", err)
+			}
+			fixturePath := filepath.Join(sourceDir, "fixture.json")
+			if err := os.WriteFile(fixturePath, tc.payload, 0o644); err != nil {
+				t.Fatalf("failed to write fixture: %v", err)
+			}
+			storeDir := filepath.Join(sourceDir, "store")
+
+			cmd := exec.Command(binPath, "fetch", tc.source, "golang")
+			cmd.Env = append(os.Environ(),
+				"GO_WANT_CLI_HELPER=1",
+				"CLI_FIXTURE_FILE="+fixturePath,
+				"WORDS_ON_THE_STREET_REGISTRY="+regPath,
+				"WORDS_ON_THE_STREET_STORE="+storeDir,
+			)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("CLI fetch failed: %v\nstderr: %s", err, stderr.String())
+			}
+			if !bytes.Equal(stdout.Bytes(), tc.payload) {
+				t.Fatalf("CLI did not return the fetched bytes:\ngot:  %q\nwant: %q", stdout.Bytes(), tc.payload)
+			}
+		})
+	}
+}
 
 func TestCLIAndMCPMatch_RealBinary(t *testing.T) {
 	// Build the real binary
