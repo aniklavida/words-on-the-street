@@ -225,7 +225,7 @@ func resolveLinkedIn(query string) (ResolvedRequest, error) {
 // FetchQuery resolves a query for a named source and fetches it through the
 // registry, recording evidence in the same operation. An unknown source or a
 // query that does not resolve is refused before any bytes are retrieved.
-func FetchQuery(ctx context.Context, store evidence.Store, reg *backend.Registry, source string, query string) (string, error) {
+func FetchQuery(ctx context.Context, store evidence.Store, reg *backend.Registry, source string, query string, opts ...Option) (string, error) {
 	src, ok := LookupSource(source)
 	if !ok {
 		return "", fmt.Errorf("%w: %q", ErrUnknownSource, source)
@@ -256,5 +256,5 @@ func FetchQuery(ctx context.Context, store evidence.Store, reg *backend.Registry
 		}
 		args = append(args, src.CredentialArgs()...)
 	}
-	return FetchSource(ctx, store, reg, source, req.URL, args)
+	return FetchSource(ctx, store, reg, source, req.URL, args, opts...)
 }

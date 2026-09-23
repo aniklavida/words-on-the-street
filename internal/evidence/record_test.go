@@ -232,3 +232,59 @@ func TestSanitizeArgs_RedactsCredentials(t *testing.T) {
 		t.Errorf("SanitizeArgs modified URL: %s", joined)
 	}
 }
+
+func TestRecord_RoutingOverride(t *testing.T) {
+	raw := []byte("payload with routing override")
+	hash := fmt.Sprintf("%x", sha256.Sum256(raw))
+
+	rec := &Record{
+		ResolvedURL:           "https://example.com/items",
+		Timestamp:             time.Now().UTC(),
+		Hash:                  hash,
+		BackendName:           "curl",
+		BackendVersion:        "8.4.0",
+		RoutingOverride:       true,
+		RoutingOverrideReason: "User explicitly chose twitter instead of recommended technical sources",
+		Payload:               raw,
+	}
+
+	if err := rec.Validate(); err != nil {
+		t.Fatalf("expected valid record with routing override to pass validation, got: %v", err)
+	}
+	if !rec.RoutingOverride {
+		t.Errorf("expected RoutingOverride to be true")
+	}
+	if rec.RoutingOverrideReason == "" {
+		t.Errorf("expected non-empty RoutingOverrideReason")
+	}
+}
+
+func TestRecord_RoutingOverrideRejectsSecrets(t *testing.T) {
+	ResetSecrets()
+	t.Cleanup(ResetSecrets)
+
+	const secret = "override-secret-credential-value-999"
+	RegisterSecret(secret)
+
+	raw := []byte("clean payload bytes")
+	hash := fmt.Sprintf("%x", sha256.Sum256(raw))
+
+	rec := &Record{
+		ResolvedURL:           "https://example.com/items",
+		Timestamp:             time.Now().UTC(),
+		Hash:                  hash,
+		BackendName:           "curl",
+		BackendVersion:        "8.4.0",
+		RoutingOverride:       true,
+		RoutingOverrideReason: "Attempting to leak secret: " + secret,
+		Payload:               raw,
+	}
+
+	err := rec.Validate()
+	if err == nil {
+		t.Fatal("expected Validate to reject registered secret in RoutingOverrideReason, got nil")
+	}
+	if !strings.Contains(err.Error(), "registered secret in routing override reason") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}

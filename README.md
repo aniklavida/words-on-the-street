@@ -93,6 +93,7 @@ A credential never enters the evidence record, the synthesis, the log, or anythi
 - [Roadmap](docs/ROADMAP.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [LinkedIn source: cookie, risk and rate limits](docs/LINKEDIN.md)
+- [Routing and source trust weighting](docs/ROUTING.md)
 
 ## Licence
 

@@ -41,33 +41,67 @@ func main() {
 
 	switch command {
 	case "fetch":
-		if len(os.Args) < 3 {
-			fmt.Println("Usage: words-on-the-street fetch <source> <query>")
-			fmt.Println("       words-on-the-street fetch <url> <backend> [args...]")
+		var (
+			routingOverride       bool
+			routingOverrideReason string
+			fetchArgs             []string
+		)
+		for i := 2; i < len(os.Args); i++ {
+			arg := os.Args[i]
+			switch {
+			case arg == "--override":
+				routingOverride = true
+			case strings.HasPrefix(arg, "--override-reason="):
+				routingOverride = true
+				routingOverrideReason = strings.TrimPrefix(arg, "--override-reason=")
+			case arg == "--override-reason" && i+1 < len(os.Args):
+				routingOverride = true
+				routingOverrideReason = os.Args[i+1]
+				i++
+			case strings.HasPrefix(arg, "--reason="):
+				routingOverride = true
+				routingOverrideReason = strings.TrimPrefix(arg, "--reason=")
+			case arg == "--reason" && i+1 < len(os.Args):
+				routingOverride = true
+				routingOverrideReason = os.Args[i+1]
+				i++
+			default:
+				fetchArgs = append(fetchArgs, arg)
+			}
+		}
+
+		if len(fetchArgs) < 2 {
+			fmt.Println("Usage: words-on-the-street fetch [--override] [--override-reason <reason>] <source> <query>")
+			fmt.Println("       words-on-the-street fetch [--override] [--override-reason <reason>] <url> <backend> [args...]")
 			os.Exit(1)
+		}
+
+		var opts []fetch.Option
+		if routingOverride || routingOverrideReason != "" {
+			opts = append(opts, fetch.WithRoutingOverride(true, routingOverrideReason))
 		}
 
 		var hash string
 		sourceName := ""
-		if _, isSource := a.Registry.BackendsForSource(os.Args[2]); isSource {
+		if _, isSource := a.Registry.BackendsForSource(fetchArgs[0]); isSource {
 			// Source form: resolve the query, then fetch and record through the
 			// source's registered backends.
-			if len(os.Args) < 4 {
-				fmt.Printf("Usage: words-on-the-street fetch %s <query>\n", os.Args[2])
+			if len(fetchArgs) < 2 {
+				fmt.Printf("Usage: words-on-the-street fetch %s <query>\n", fetchArgs[0])
 				os.Exit(1)
 			}
-			sourceName = os.Args[2]
-			hash, err = a.FetchQuery(context.Background(), os.Args[2], os.Args[3])
+			sourceName = fetchArgs[0]
+			hash, err = a.FetchQuery(context.Background(), fetchArgs[0], fetchArgs[1], opts...)
 		} else {
 			// Explicit form: a URL and a named backend, with optional extra args.
-			if len(os.Args) < 4 {
+			if len(fetchArgs) < 2 {
 				fmt.Println("Usage: words-on-the-street fetch <url> <backend> [args...]")
 				os.Exit(1)
 			}
-			url := os.Args[2]
-			backendName := os.Args[3]
-			args := os.Args[4:]
-			hash, err = a.Fetch(context.Background(), backendName, args, url, "1.0", false)
+			url := fetchArgs[0]
+			backendName := fetchArgs[1]
+			args := fetchArgs[2:]
+			hash, err = a.Fetch(context.Background(), backendName, args, url, "1.0", false, opts...)
 		}
 
 		if err != nil {
@@ -85,6 +119,14 @@ func main() {
 		// bytes; anything piping the payload is unaffected, and a caller that
 		// wants to re-check the fetch has the identifier to do it.
 		fmt.Fprintf(os.Stderr, "record: %s\n", hash)
+
+		if rec.RoutingOverride {
+			if rec.RoutingOverrideReason != "" {
+				fmt.Fprintf(os.Stderr, "override: true (reason: %s)\n", evidence.Redact(rec.RoutingOverrideReason))
+			} else {
+				fmt.Fprintln(os.Stderr, "override: true")
+			}
+		}
 
 		// Degradation is surfaced where the fetch happens, not only in the
 		// record. It goes to stderr so stdout remains exactly the fetched

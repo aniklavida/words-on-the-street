@@ -652,3 +652,82 @@ func TestFetchSource_AllBackendsFailErrorNamesEveryAttempt(t *testing.T) {
 		t.Errorf("failure must give a reason for each attempted backend, found %d in: %s", got, msg)
 	}
 }
+
+// Done when: 4. A user-overridden source selection is recorded and distinguishable from a routing-skill-recommended one in the evidence record — proven by a test.
+func TestFetch_RoutingOverrideDistinguishableInEvidenceRecord(t *testing.T) {
+	ctx := context.Background()
+	store := evidence.NewMemoryStore()
+
+	// 1. Fetch recommended by routing skill (no override)
+	hashRec, err := Fetch(ctx, store, "echo", []string{"recommended fetch payload"}, "https://example.com/recommended", "1.0", false)
+	if err != nil {
+		t.Fatalf("recommended Fetch failed: %v", err)
+	}
+	recRec, err := store.Get(hashRec)
+	if err != nil {
+		t.Fatalf("store.Get failed for recommended fetch: %v", err)
+	}
+	if recRec.RoutingOverride {
+		t.Errorf("expected RoutingOverride false for recommended fetch, got true")
+	}
+	if recRec.RoutingOverrideReason != "" {
+		t.Errorf("expected empty RoutingOverrideReason for recommended fetch, got %q", recRec.RoutingOverrideReason)
+	}
+
+	// 2. Fetch with user override
+	reason := "User insisted on checking microblog reactions despite library evaluation routing recommendation"
+	hashOverridden, err := Fetch(ctx, store, "echo", []string{"overridden fetch payload"}, "https://example.com/overridden", "1.0", false,
+		WithRoutingOverride(true, reason))
+	if err != nil {
+		t.Fatalf("overridden Fetch failed: %v", err)
+	}
+	recOverridden, err := store.Get(hashOverridden)
+	if err != nil {
+		t.Fatalf("store.Get failed for overridden fetch: %v", err)
+	}
+	if !recOverridden.RoutingOverride {
+		t.Errorf("expected RoutingOverride true for overridden fetch, got false")
+	}
+	if recOverridden.RoutingOverrideReason != reason {
+		t.Errorf("expected RoutingOverrideReason %q, got %q", reason, recOverridden.RoutingOverrideReason)
+	}
+}
+
+func TestFetchSource_RoutingOverrideRecorded(t *testing.T) {
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	t.Setenv("HELPER_TOOL_NAME", "override-test-tool")
+	t.Setenv("HELPER_VERSION", "1.0.0")
+
+	ctx := context.Background()
+	store := evidence.NewMemoryStore()
+	reg := backend.NewRegistry()
+
+	b := backend.Backend{
+		Name:         "override-tool",
+		Command:      os.Args[0],
+		VersionArgs:  []string{"-test.run=^TestHelperProcess$", "--", "--version"},
+		VersionRange: ">= 1.0.0",
+		Licence:      "MIT",
+	}
+	if err := reg.RegisterSource("twitter", b); err != nil {
+		t.Fatalf("RegisterSource failed: %v", err)
+	}
+
+	overrideReason := "User overrode culture question routing away from professional network"
+	hash, err := FetchSource(ctx, store, reg, "twitter", "https://example.com/override-source", []string{"-test.run=^TestHelperProcess$", "--"},
+		WithRoutingOverride(true, overrideReason))
+	if err != nil {
+		t.Fatalf("FetchSource failed: %v", err)
+	}
+
+	rec, err := store.Get(hash)
+	if err != nil {
+		t.Fatalf("store.Get failed: %v", err)
+	}
+	if !rec.RoutingOverride {
+		t.Errorf("expected RoutingOverride to be true")
+	}
+	if rec.RoutingOverrideReason != overrideReason {
+		t.Errorf("expected RoutingOverrideReason %q, got %q", overrideReason, rec.RoutingOverrideReason)
+	}
+}

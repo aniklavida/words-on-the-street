@@ -43,23 +43,25 @@ type BackendAttempt struct {
 // as received before any normalisation, backend name and version, and whether
 // the path taken was primary or a fallback.
 type Record struct {
-	ResolvedURL       string               `json:"resolved_url"`
-	Timestamp         time.Time            `json:"timestamp"`
-	Hash              string               `json:"hash"` // Content hash of bytes AS RECEIVED, before any normalisation
-	BackendName       string               `json:"backend_name"`
-	BackendVersion    string               `json:"backend_version"`
-	Version           string               `json:"version"` // Backward-compatible alias for BackendVersion
-	IsFallback        bool                 `json:"is_fallback"`
-	Payload           []byte               `json:"payload,omitempty"`     // Raw bytes as received
-	RawPayload        []byte               `json:"raw_payload,omitempty"` // Explicit alias for raw bytes
-	BackendArgs       []string             `json:"backend_args,omitempty"`
-	Normalisation     *NormalisationRecord `json:"normalisation,omitempty"`
-	NormalisedPayload []byte               `json:"normalised_payload,omitempty"`
-	BackendStatus     string               `json:"backend_status,omitempty"`
-	MissingBackends   []string             `json:"missing_backends,omitempty"`
-	BackendAttempts   []BackendAttempt     `json:"backend_attempts,omitempty"`
-	RecordHash        string               `json:"record_hash,omitempty"`
-	PrevRecordHash    string               `json:"prev_record_hash,omitempty"`
+	ResolvedURL           string               `json:"resolved_url"`
+	Timestamp             time.Time            `json:"timestamp"`
+	Hash                  string               `json:"hash"` // Content hash of bytes AS RECEIVED, before any normalisation
+	BackendName           string               `json:"backend_name"`
+	BackendVersion        string               `json:"backend_version"`
+	Version               string               `json:"version"` // Backward-compatible alias for BackendVersion
+	IsFallback            bool                 `json:"is_fallback"`
+	Payload               []byte               `json:"payload,omitempty"`     // Raw bytes as received
+	RawPayload            []byte               `json:"raw_payload,omitempty"` // Explicit alias for raw bytes
+	BackendArgs           []string             `json:"backend_args,omitempty"`
+	Normalisation         *NormalisationRecord `json:"normalisation,omitempty"`
+	NormalisedPayload     []byte               `json:"normalised_payload,omitempty"`
+	BackendStatus         string               `json:"backend_status,omitempty"`
+	MissingBackends       []string             `json:"missing_backends,omitempty"`
+	BackendAttempts       []BackendAttempt     `json:"backend_attempts,omitempty"`
+	RoutingOverride       bool                 `json:"routing_override,omitempty"`
+	RoutingOverrideReason string               `json:"routing_override_reason,omitempty"`
+	RecordHash            string               `json:"record_hash,omitempty"`
+	PrevRecordHash        string               `json:"prev_record_hash,omitempty"`
 }
 
 // RawBytes returns the raw bytes as received.
@@ -117,6 +119,9 @@ func (r *Record) Validate() error {
 		if ContainsSecret(attempt.Error) {
 			return fmt.Errorf("%w: registered secret in backend attempt (%s)", ErrCredentialLeak, attempt.BackendName)
 		}
+	}
+	if ContainsSecret(r.RoutingOverrideReason) {
+		return fmt.Errorf("%w: registered secret in routing override reason", ErrCredentialLeak)
 	}
 
 	for i, arg := range r.BackendArgs {

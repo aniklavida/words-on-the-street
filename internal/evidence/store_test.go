@@ -230,3 +230,90 @@ func TestStore_MemoryStore(t *testing.T) {
 		t.Errorf("MemoryStore integrity failed: %v", err)
 	}
 }
+
+func TestStore_RoutingOverrideDistinguishable(t *testing.T) {
+	dir := t.TempDir()
+	fileStore, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatalf("NewFileStore failed: %v", err)
+	}
+
+	memStore := NewMemoryStore()
+
+	stores := []struct {
+		name  string
+		store Store
+	}{
+		{"FileStore", fileStore},
+		{"MemoryStore", memStore},
+	}
+
+	for _, s := range stores {
+		t.Run(s.name, func(t *testing.T) {
+			rawRec := []byte("content from recommended routing")
+			hashRec := fmt.Sprintf("%x", sha256.Sum256(rawRec))
+
+			recRecommended := &Record{
+				ResolvedURL:     "https://example.com/item1",
+				Timestamp:       time.Now().UTC(),
+				Hash:            hashRec,
+				BackendName:     "curl",
+				BackendVersion:  "1.0",
+				RoutingOverride: false,
+				Payload:         rawRec,
+			}
+
+			if err := s.store.Save(recRecommended); err != nil {
+				t.Fatalf("Save recommended failed: %v", err)
+			}
+
+			rawOverridden := []byte("content from user override routing")
+			hashOverridden := fmt.Sprintf("%x", sha256.Sum256(rawOverridden))
+
+			recOverridden := &Record{
+				ResolvedURL:           "https://example.com/item2",
+				Timestamp:             time.Now().UTC(),
+				Hash:                  hashOverridden,
+				BackendName:           "curl",
+				BackendVersion:        "1.0",
+				RoutingOverride:       true,
+				RoutingOverrideReason: "Forced by user preference",
+				Payload:               rawOverridden,
+			}
+
+			if err := s.store.Save(recOverridden); err != nil {
+				t.Fatalf("Save overridden failed: %v", err)
+			}
+
+			gotRec, err := s.store.Get(hashRec)
+			if err != nil {
+				t.Fatalf("Get recommended failed: %v", err)
+			}
+			if gotRec.RoutingOverride {
+				t.Errorf("expected RoutingOverride false for recommended fetch, got true")
+			}
+			if gotRec.RoutingOverrideReason != "" {
+				t.Errorf("expected empty RoutingOverrideReason for recommended fetch, got %q", gotRec.RoutingOverrideReason)
+			}
+
+			gotOverridden, err := s.store.Get(hashOverridden)
+			if err != nil {
+				t.Fatalf("Get overridden failed: %v", err)
+			}
+			if !gotOverridden.RoutingOverride {
+				t.Errorf("expected RoutingOverride true for overridden fetch, got false")
+			}
+			if gotOverridden.RoutingOverrideReason != "Forced by user preference" {
+				t.Errorf("expected RoutingOverrideReason %q, got %q", "Forced by user preference", gotOverridden.RoutingOverrideReason)
+			}
+
+			// Modifying routing override status for same payload hash must violate append-only
+			recTampered := *recRecommended
+			recTampered.RoutingOverride = true
+			recTampered.RoutingOverrideReason = "Attempted retroactive override modification"
+			if err := s.store.Save(&recTampered); err == nil {
+				t.Fatalf("expected append-only violation when modifying routing override for existing hash, got nil")
+			}
+		})
+	}
+}
