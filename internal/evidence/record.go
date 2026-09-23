@@ -160,6 +160,31 @@ func isSensitiveKey(key string) bool {
 	return false
 }
 
+// isSensitiveQueryKey reports whether a URL query parameter name denotes a
+// credential. Unlike the header heuristic, it matches whole segments rather than
+// substrings: "access_token", "api_key" and "x-amz-signature" are credentials,
+// while a benign key such as "keywords" is not. Without this, the query that
+// names what was searched for would be redacted, and the record would describe a
+// different URL from the one the backend actually fetched.
+func isSensitiveQueryKey(key string) bool {
+	lower := strings.ToLower(key)
+	for _, pattern := range sensitiveKeyPattern {
+		if lower == pattern {
+			return true
+		}
+	}
+	for _, segment := range strings.FieldsFunc(lower, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9')
+	}) {
+		for _, pattern := range sensitiveKeyPattern {
+			if segment == pattern {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // SanitizeURL strips userinfo and redacts credential query parameters from a URL.
 func SanitizeURL(rawURL string) string {
 	u, err := url.Parse(rawURL)
@@ -174,7 +199,7 @@ func SanitizeURL(rawURL string) string {
 		q := u.Query()
 		modified := false
 		for key := range q {
-			if isSensitiveKey(key) {
+			if isSensitiveQueryKey(key) {
 				q.Set(key, "[REDACTED]")
 				modified = true
 			}
@@ -197,7 +222,7 @@ func HasCredentials(rawURL string) bool {
 	}
 	q := u.Query()
 	for key, values := range q {
-		if isSensitiveKey(key) {
+		if isSensitiveQueryKey(key) {
 			for _, val := range values {
 				if val != "[REDACTED]" {
 					return true

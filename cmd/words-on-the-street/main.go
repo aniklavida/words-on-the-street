@@ -13,6 +13,7 @@ import (
 	"github.com/aniklavida/words-on-the-street/internal/backend"
 	"github.com/aniklavida/words-on-the-street/internal/dashboard"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
+	"github.com/aniklavida/words-on-the-street/internal/fetch"
 	"github.com/aniklavida/words-on-the-street/internal/mcpserver"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -181,6 +182,28 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Dashboard listening on http://%s (loopback only, read-only)\n", ln.Addr())
 		if err := http.Serve(ln, dash.Handler()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fmt.Printf("Dashboard error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "config":
+		// Configuration is an environment variable, matching the store and
+		// registry. This command is the point of configuration: it shows the
+		// ban-risk disclosure in plain text before the user exports the cookie,
+		// and it never echoes the value.
+		if len(os.Args) < 3 {
+			fmt.Println("Usage: words-on-the-street config linkedin")
+			os.Exit(1)
+		}
+		switch os.Args[2] {
+		case "linkedin":
+			fmt.Println(fetch.LinkedInBanRiskDisclosure)
+			if _, err := fetch.LinkedInCookie(); err != nil {
+				fmt.Printf("\nNo cookie is configured yet. Export %s, then run `words-on-the-street fetch linkedin <query>`.\n", fetch.LinkedInCookieEnv)
+			} else {
+				fmt.Printf("\nA cookie is configured in %s. Its value is never printed, recorded, or shown to an agent.\n", fetch.LinkedInCookieEnv)
+			}
+		default:
+			fmt.Printf("Unknown config target: %s\n", os.Args[2])
 			os.Exit(1)
 		}
 
