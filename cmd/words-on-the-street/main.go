@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/aniklavida/words-on-the-street/internal/app"
 	"github.com/aniklavida/words-on-the-street/internal/backend"
@@ -38,6 +39,7 @@ func main() {
 		}
 
 		var hash string
+		sourceName := ""
 		if _, isSource := a.Registry.BackendsForSource(os.Args[2]); isSource {
 			// Source form: resolve the query, then fetch and record through the
 			// source's registered backends.
@@ -45,6 +47,7 @@ func main() {
 				fmt.Printf("Usage: words-on-the-street fetch %s <query>\n", os.Args[2])
 				os.Exit(1)
 			}
+			sourceName = os.Args[2]
 			hash, err = a.FetchQuery(context.Background(), os.Args[2], os.Args[3])
 		} else {
 			// Explicit form: a URL and a named backend, with optional extra args.
@@ -73,6 +76,16 @@ func main() {
 		// bytes; anything piping the payload is unaffected, and a caller that
 		// wants to re-check the fetch has the identifier to do it.
 		fmt.Fprintf(os.Stderr, "record: %s\n", hash)
+
+		// Degradation is surfaced where the fetch happens, not only in the
+		// record. It goes to stderr so stdout remains exactly the fetched
+		// bytes, and it is derived from the record so the warning and the
+		// record cannot describe different backends. A degraded fetch still
+		// exits 0: succeeding on a fallback is the whole point of the failover.
+		if sourceName != "" && rec.IsFallback {
+			fmt.Fprintf(os.Stderr, "%s\n", degradationWarning(sourceName, rec))
+		}
+
 		fmt.Print(string(rec.Payload))
 
 	case "verify":
@@ -110,6 +123,28 @@ func main() {
 			}
 		}
 		if hasError {
+			os.Exit(1)
+		}
+
+	case "status":
+		statuses := backend.CheckAllStatus(context.Background(), a.Registry)
+		unhealthy := false
+		for _, st := range statuses {
+			switch st.State {
+			case backend.SourceHealthy:
+				fmt.Printf("source: %s, status: healthy (primary %s, serving %s)\n",
+					st.Source, st.Primary, st.Serving)
+			case backend.SourceDegraded:
+				fmt.Printf("source: %s, status: degraded (primary %s unavailable, serving fallback %s)\n",
+					st.Source, st.Primary, st.Serving)
+				unhealthy = true
+			default:
+				fmt.Printf("source: %s, status: down (no backend reachable, primary %s)\n",
+					st.Source, st.Primary)
+				unhealthy = true
+			}
+		}
+		if unhealthy {
 			os.Exit(1)
 		}
 
@@ -151,6 +186,28 @@ func main() {
 		fmt.Printf("Unknown command: %s\n", command)
 		os.Exit(1)
 	}
+}
+
+// degradationWarning describes a successful fetch that did not use the primary
+// backend. It names the backend that served the bytes and every earlier backend
+// that failed, with the status recorded for it, so a human or a calling script
+// can tell degraded operation from a clean primary fetch. The text is built
+// from the evidence record, so the warning cannot name a different backend than
+// the record does.
+func degradationWarning(source string, rec *evidence.Record) string {
+	skipped := make([]string, 0, len(rec.BackendAttempts))
+	for _, attempt := range rec.BackendAttempts {
+		if attempt.Status == "" {
+			skipped = append(skipped, attempt.BackendName)
+			continue
+		}
+		skipped = append(skipped, fmt.Sprintf("%s (%s)", attempt.BackendName, attempt.Status))
+	}
+	if len(skipped) == 0 {
+		skipped = append(skipped, rec.MissingBackends...)
+	}
+	return fmt.Sprintf("⚠ %s: primary backend unavailable, used fallback (%s); skipped: %s",
+		source, rec.BackendName, strings.Join(skipped, ", "))
 }
 
 // loadRegistry returns the shipped default sources, or the registry described by
