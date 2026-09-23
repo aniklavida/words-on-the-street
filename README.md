@@ -74,6 +74,13 @@ All three ship together. None is published without the other two.
 - **Degradation is visible.** A failover is recorded and surfaced, not hidden.
 - **No telemetry, ever**, under any configuration.
 
+## Installation
+
+Releases publish a cross-platform binary and a `checksums.txt` file with the
+SHA-256 of every artifact. Verify the checksum before running the binary; the
+full procedure is in [docs/INSTALL.md](docs/INSTALL.md). There is no install
+path that asks you to fetch a script or document and execute it.
+
 ## Sources need different things
 
 | Access | Requirement |
@@ -91,6 +98,7 @@ A credential never enters the evidence record, the synthesis, the log, or anythi
 - [Specification](docs/SPEC.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Installation](docs/INSTALL.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [LinkedIn source: cookie, risk and rate limits](docs/LINKEDIN.md)
 - [Routing and source trust weighting](docs/ROUTING.md)
