@@ -129,8 +129,8 @@ LinkedIn for workplace culture):
 
 ## Output contract for synthesized answers
 
-When generating a multi-source synthesized answer (or when implementing the
-planned synthesis stage in milestone 10):
+When generating a multi-source synthesized answer, or when using the
+implemented `internal/synthesis` library:
 
 1. **Chosen sources and rationale:** Must state every source fetched and why it
    was selected.
@@ -144,3 +144,10 @@ planned synthesis stage in milestone 10):
    - Bytes, time, and hash are proved.
    - Truth of the statements is not proved.
    - Poster unrepresentativeness caveat cannot be omitted.
+
+The `internal/synthesis` library enforces items 4 and 5 mechanically: a claim
+is paired with the record hashes it is attributed to and refused when a hash is
+not in the store, an unreached source is rendered as `unreached: <reason>`
+rather than dropped, and the representativeness sentence "What can be scraped
+is not representative." is a constant appended by the renderer, not a
+configurable option.

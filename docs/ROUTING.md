@@ -1,6 +1,6 @@
 # Routing and source trust weighting
 
-**Status:** implemented and tested (routing knowledge, bias model, CLI and MCP override recording). Synthesis contract is planned.
+**Status:** implemented and tested (routing knowledge, bias model, CLI and MCP override recording). The synthesis contract is implemented and tested as the library `internal/synthesis`; exposing it as a CLI command or MCP tool is planned.
 
 ## Why routing ships as Markdown and not in the binary
 
@@ -192,10 +192,33 @@ The CLI outputs:
 
 ## Output contract for synthesized answers
 
-Stage four of Words on the Street is **Synthesis** (planned for milestone 10).
-While individual fetches retrieve raw evidence records, any agent or subsystem
-that synthesizes an answer from multiple fetches must expose the routing
-decisions in its output.
+Stage four of Words on the Street is **Synthesis**. It is implemented and
+tested as the library `internal/synthesis`; it is not yet exposed as a CLI
+command or an MCP tool, and a connecting caller builds an answer from records
+already in the store. While individual fetches retrieve raw evidence records,
+any agent or subsystem that synthesizes an answer from multiple fetches must
+expose the routing decisions in its output.
+
+Three rules are enforced structurally by that library rather than left to a
+reviewer:
+
+1. **A claim cannot exist without a record.** `synthesis.Claim` pairs claim
+   text with the record hashes it is attributed to, and the only constructor
+   refuses an empty hash list. `synthesis.Build` then resolves every hash with
+   `store.Get` and refuses the whole answer if any hash does not resolve, so a
+   claim with no record behind it cannot be rendered.
+2. **Coverage is stated, including what could not be reached.** Every source
+   the caller configured for the question appears in the output. A source that
+   failed, or for which no outcome was recorded, is rendered as
+   `unreached: <reason>`; it cannot be silently dropped.
+3. **The representativeness caveat is unconditional.** The sentence "What can
+   be scraped is not representative." is a package constant appended by the one
+   builder's renderers. It is not a field, a parameter, or a config option, so
+   no caller can suppress it.
+
+No sentiment score, star rating, or derived sentiment metric is computed or
+emitted. The only aggregate in the output is a plain count of records per
+source.
 
 ### The synthesis contract
 

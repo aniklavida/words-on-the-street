@@ -85,8 +85,18 @@ access without the password, is shown at the point of configuration.
 
 Answers where every claim resolves to a stored record.
 
+**Implemented and tested** as the library `internal/synthesis`; wiring it to a
+CLI command or MCP tool is **planned**.
+
 *Done when:* an unreachable source appears in the answer as unreached rather
 than omitted, and the representativeness caveat cannot be configured away.
+
+*Met:* `TestEveryClaimResolvesToStoredRecord` resolves every claim hash through
+`store.Get` and refuses a claim whose record is absent;
+`TestUnreachedSourceAppearsExplicitly` names a failed and an outcome-less
+source; `TestCaveatCannotBeSuppressed` shows the caveat survives the emptiest
+answer and both renderers and that the builder takes no variadic option and the
+config exposes no caveat switch.
 
 ## 11 · `watch`
 
