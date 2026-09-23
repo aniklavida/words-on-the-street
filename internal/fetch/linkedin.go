@@ -8,13 +8,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/aniklavida/words-on-the-street/internal/evidence"
+	"github.com/aniklavida/words-on-the-street/internal/keychain"
 )
 
 const (
 	// LinkedInCookieEnv names the environment variable that holds the user's own
-	// already-authenticated LinkedIn session cookie. This is the same
-	// configuration mechanism the project already uses for the evidence store
-	// and the registry, so it adds no second way to configure anything.
+	// already-authenticated LinkedIn session cookie. This is the fallback configuration
+	// mechanism when the OS keychain is not available or unconfigured.
 	LinkedInCookieEnv = "WORDS_ON_THE_STREET_LINKEDIN_COOKIE"
 	// LinkedInMinIntervalEnv overrides the conservative default minimum delay
 	// between LinkedIn requests. Raising it is a disclosure, not a gate.
@@ -51,8 +53,17 @@ cookie for an account you depend on.
 Rate limits are conservative by default. You may raise them, but doing so
 increases the risk described above; see docs/LINKEDIN.md.
 
-Set the cookie and then fetch:
+Cookie resolution order:
+  1. OS keychain (words-on-the-street / linkedin)
+  2. Environment variable: WORDS_ON_THE_STREET_LINKEDIN_COOKIE
+
+Store the cookie in the OS keychain:
+  words-on-the-street config linkedin --store
+
+Or export the environment variable:
   export WORDS_ON_THE_STREET_LINKEDIN_COOKIE='li_at=...; JSESSIONID=...'
+
+Then fetch:
   words-on-the-street fetch linkedin <query>
 
 The cookie value itself is never printed, written to an evidence record, logged,
@@ -61,17 +72,32 @@ used in a synthesis, or passed to an agent.`
 // LinkedInCookie returns the configured LinkedIn session cookie, or an error
 // that explains how to configure one. The value is returned only so it can be
 // passed to the backend as a request header; it is never logged here.
+//
+// Resolution order:
+//  1. OS keychain (words-on-the-street / linkedin)
+//  2. Environment variable: WORDS_ON_THE_STREET_LINKEDIN_COOKIE
 func LinkedInCookie() (string, error) {
+	if val, err := keychain.LinkedInCookie(); err == nil {
+		cookie := strings.TrimSpace(val)
+		if cookie != "" {
+			if strings.ContainsAny(cookie, "\r\n") {
+				return "", fmt.Errorf("linkedin cookie in keychain must not contain newlines")
+			}
+			evidence.RegisterSecret(cookie)
+			return cookie, nil
+		}
+	}
+
 	cookie := strings.TrimSpace(os.Getenv(LinkedInCookieEnv))
-	if cookie == "" {
-		return "", fmt.Errorf("%w: set %s; run \"words-on-the-street config linkedin\" to read the risks first", ErrLinkedInCookieMissing, LinkedInCookieEnv)
+	if cookie != "" {
+		if strings.ContainsAny(cookie, "\r\n") {
+			return "", fmt.Errorf("%s must not contain newlines", LinkedInCookieEnv)
+		}
+		evidence.RegisterSecret(cookie)
+		return cookie, nil
 	}
-	// A newline would let a crafted value inject a second header into the
-	// backend's argument. Refuse it rather than pass it through.
-	if strings.ContainsAny(cookie, "\r\n") {
-		return "", fmt.Errorf("%s must not contain newlines", LinkedInCookieEnv)
-	}
-	return cookie, nil
+
+	return "", fmt.Errorf("%w: store in keychain with \"words-on-the-street config linkedin --store\" or set %s; run \"words-on-the-street config linkedin\" to read the risks first", ErrLinkedInCookieMissing, LinkedInCookieEnv)
 }
 
 // intervalLimiter serialises requests so no two are made closer together than

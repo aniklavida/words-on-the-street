@@ -13,6 +13,7 @@ import (
 
 	"github.com/aniklavida/words-on-the-street/internal/backend"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
+	"github.com/aniklavida/words-on-the-street/internal/keychain"
 )
 
 // The value below is an obviously-fake placeholder, never a real credential.
@@ -306,5 +307,101 @@ func TestRateLimiter_EnforcesMinimumIntervalBetweenCalls(t *testing.T) {
 	}
 	if len(slept) != 1 || slept[0] != time.Minute {
 		t.Fatalf("second Wait slept %v, want exactly one minute", slept)
+	}
+}
+
+// Done when: 1. A cookie stored in the keychain is read and used for a fetch,
+// without ever needing the environment variable set.
+// Uses a fake/mock keychain backend for CI, since a real OS keychain isn't
+// scriptable in an automated test.
+func TestTwitter_CookieFromKeychainUsedForFetchWithoutEnvVar(t *testing.T) {
+	resetTwitterState(t)
+	mem := keychain.NewMemoryProvider()
+	keychain.SetProvider(mem)
+	defer keychain.ResetProvider()
+
+	const fakeCookie = "fake-twitter-keychain-cookie-12345"
+	if err := keychain.SetTwitterCookie(fakeCookie); err != nil {
+		t.Fatalf("failed to store cookie in keychain: %v", err)
+	}
+
+	// Environment variable is completely unset
+	t.Setenv(TwitterCookieEnv, "")
+
+	payload := []byte(`{"tweet":"served using keychain session"}`)
+	fixture, _ := sourceFixture(t, payload)
+
+	store, err := evidence.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileStore failed: %v", err)
+	}
+	reg := sourceRegistry(t, "twitter", fixture)
+
+	hash, err := FetchQuery(context.Background(), store, reg, "twitter", "golang")
+	if err != nil {
+		t.Fatalf("FetchQuery failed: %v", err)
+	}
+
+	rec, err := store.Get(hash)
+	if err != nil {
+		t.Fatalf("store.Get failed: %v", err)
+	}
+
+	// The record backend arguments must show the cookie header redacted
+	foundRedacted := false
+	for _, arg := range rec.BackendArgs {
+		if strings.Contains(arg, fakeCookie) {
+			t.Errorf("backend args contain raw keychain cookie: %s", arg)
+		}
+		if arg == "Cookie: [REDACTED]" {
+			foundRedacted = true
+		}
+	}
+	if !foundRedacted {
+		t.Errorf("expected redacted cookie argument in backend args, got %v", rec.BackendArgs)
+	}
+}
+
+// Done when: 2. When no keychain is available or empty, the existing environment-variable
+// path is unaffected and falls back cleanly.
+func TestTwitter_FallbackToEnvironmentVariableWhenKeychainEmptyOrUnavailable(t *testing.T) {
+	resetTwitterState(t)
+	// Empty keychain provider simulates unset keychain / no secret found
+	mem := keychain.NewMemoryProvider()
+	keychain.SetProvider(mem)
+	defer keychain.ResetProvider()
+
+	t.Setenv(TwitterCookieEnv, testTwitterCookie)
+
+	payload := []byte(`{"tweet":"served using env fallback"}`)
+	fixture, _ := sourceFixture(t, payload)
+
+	store, err := evidence.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileStore failed: %v", err)
+	}
+	reg := sourceRegistry(t, "twitter", fixture)
+
+	hash, err := FetchQuery(context.Background(), store, reg, "twitter", "golang")
+	if err != nil {
+		t.Fatalf("FetchQuery failed: %v", err)
+	}
+
+	rec, err := store.Get(hash)
+	if err != nil {
+		t.Fatalf("store.Get failed: %v", err)
+	}
+
+	foundRedacted := false
+	for _, arg := range rec.BackendArgs {
+		if strings.Contains(arg, testTwitterCookie) {
+			t.Errorf("backend args contain raw env cookie: %s", arg)
+		}
+		if arg == "Cookie: [REDACTED]" {
+			foundRedacted = true
+		}
+	}
+	if !foundRedacted {
+		t.Errorf("expected redacted cookie argument in backend args, got %v", rec.BackendArgs)
 	}
 }

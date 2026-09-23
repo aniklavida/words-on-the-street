@@ -7,26 +7,34 @@ would. The project never sees or stores your password.
 
 ## Configuring the cookie
 
-The configuration mechanism is the environment variable the rest of the project
-already uses:
+The preferred storage is your OS keychain, with a fallback to the environment
+variable:
 
-```
-export WORDS_ON_THE_STREET_LINKEDIN_COOKIE='li_at=...; JSESSIONID=...'
-words-on-the-street fetch linkedin "acme corp"
-```
+1. **OS keychain** (`words-on-the-street` / `linkedin`): store the cookie directly:
+   ```
+   words-on-the-street config linkedin --store
+   ```
+2. **Environment variable** (fallback for headless environments or CI):
+   ```
+   export WORDS_ON_THE_STREET_LINKEDIN_COOKIE='li_at=...; JSESSIONID=...'
+   ```
 
-Before you set it, run:
+Resolution order:
+1. OS keychain, if available and a cookie is stored.
+2. `WORDS_ON_THE_STREET_LINKEDIN_COOKIE` environment variable.
+
+Before you configure it, run:
 
 ```
 words-on-the-street config linkedin
 ```
 
-That command prints the ban-risk disclosure in plain text at the CLI. It never
-echoes the cookie value, whether or not one is already set.
+That command prints the ban-risk disclosure and resolution order in plain text at
+the CLI. It never echoes the cookie value, whether or not one is already set.
 
 Resolution refuses a LinkedIn query, before any backend runs, when no cookie is
-configured. That is deliberate: there is no unauthenticated fallback and no
-silent, degraded fetch.
+configured in either the keychain or the environment. That is deliberate: there
+is no unauthenticated fallback and no silent, degraded fetch.
 
 ## The risk, stated plainly
 

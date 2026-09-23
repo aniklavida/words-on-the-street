@@ -6,19 +6,15 @@ import (
 	"strings"
 
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
+	"github.com/aniklavida/words-on-the-street/internal/keychain"
 )
 
-// The twitter source is the first that reaches a platform with the user's own
-// already-authenticated session rather than an open endpoint. Two settings
-// configure it, both read from the environment so no credential is written to
-// a file this project controls. There is no second config mechanism: the
-// registry and the store already take their settings from
-// WORDS_ON_THE_STREET_* variables, and these follow the same pattern.
+// The twitter source reaches a platform with the user's own already-authenticated
+// session rather than an open endpoint. The session cookie is held in the OS keychain
+// where available, with a fallback to WORDS_ON_THE_STREET_TWITTER_COOKIE.
 const (
-	// TwitterCookieEnv names the variable holding the session cookie the user
-	// exported from a browser where they are already logged in. The binary
-	// never performs a login; it presents a session the user knowingly
-	// supplied.
+	// TwitterCookieEnv names the variable holding the session cookie fallback when
+	// the OS keychain is not available or unconfigured.
 	TwitterCookieEnv = "WORDS_ON_THE_STREET_TWITTER_COOKIE"
 
 	// TwitterRateLimitEnv names the variable that raises the per-minute
@@ -32,11 +28,31 @@ const (
 )
 
 // TwitterCookie returns the configured session cookie and reports whether one
-// is set. The value is registered with the evidence redaction set before it is
+// is set.
+//
+// Resolution order:
+//  1. OS keychain (words-on-the-street / twitter)
+//  2. Environment variable: WORDS_ON_THE_STREET_TWITTER_COOKIE
+//
+// The value is registered with the evidence redaction set before it is
 // returned, so no later boundary can emit it even if a caller mishandles it.
 func TwitterCookie() (string, bool) {
+	if val, err := keychain.TwitterCookie(); err == nil {
+		cookie := strings.TrimSpace(val)
+		if cookie != "" {
+			if strings.ContainsAny(cookie, "\r\n") {
+				return "", false
+			}
+			evidence.RegisterSecret(cookie)
+			return cookie, true
+		}
+	}
+
 	value := strings.TrimSpace(os.Getenv(TwitterCookieEnv))
 	if value == "" {
+		return "", false
+	}
+	if strings.ContainsAny(value, "\r\n") {
 		return "", false
 	}
 	evidence.RegisterSecret(value)

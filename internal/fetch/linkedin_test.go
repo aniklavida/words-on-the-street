@@ -14,6 +14,7 @@ import (
 
 	"github.com/aniklavida/words-on-the-street/internal/backend"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
+	"github.com/aniklavida/words-on-the-street/internal/keychain"
 )
 
 // sourceHelperArgsEnv, when set, makes TestSourceHelperProcess write the exact
@@ -313,5 +314,95 @@ func TestLinkedInBanRiskDisclosureNamesPermanentBanAndLitigation(t *testing.T) {
 		if !strings.Contains(LinkedInBanRiskDisclosure, want) {
 			t.Errorf("disclosure does not state %q", want)
 		}
+	}
+}
+
+// Done when: 1. A cookie stored in the keychain is read and used for a fetch,
+// without ever needing the environment variable set.
+// Uses a fake/mock keychain backend for CI, since a real OS keychain isn't
+// scriptable in an automated test.
+func TestLinkedIn_CookieFromKeychainUsedForFetchWithoutEnvVar(t *testing.T) {
+	mem := keychain.NewMemoryProvider()
+	keychain.SetProvider(mem)
+	defer keychain.ResetProvider()
+
+	const fakeCookie = "li_at=FAKE-KEYCHAIN-COOKIE-LINKEDIN-0000"
+	if err := keychain.SetLinkedInCookie(fakeCookie); err != nil {
+		t.Fatalf("failed to store cookie in keychain: %v", err)
+	}
+
+	// Environment variable is completely unset
+	t.Setenv(LinkedInCookieEnv, "")
+	t.Setenv(LinkedInMinIntervalEnv, "0")
+
+	payload := []byte(`{"source":"linkedin","posts":[{"text":"post from keychain session"}]}`)
+	fixture, _ := sourceFixture(t, payload)
+
+	argsFile := filepath.Join(t.TempDir(), "received-args.txt")
+	t.Setenv(sourceHelperArgsEnv, argsFile)
+
+	store, err := evidence.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileStore failed: %v", err)
+	}
+	reg := sourceRegistry(t, "linkedin", fixture)
+
+	hash, err := FetchQuery(context.Background(), store, reg, "linkedin", "acme")
+	if err != nil {
+		t.Fatalf("FetchQuery failed: %v", err)
+	}
+
+	received, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("fixture did not record its arguments: %v", err)
+	}
+	if !strings.Contains(string(received), fakeCookie) {
+		t.Fatalf("fixture never received the keychain cookie")
+	}
+
+	rec, err := store.Get(hash)
+	if err != nil {
+		t.Fatalf("store.Get failed: %v", err)
+	}
+	if strings.Contains(strings.Join(rec.BackendArgs, " "), fakeCookie) {
+		t.Errorf("backend args in record contain unredacted cookie")
+	}
+}
+
+// Done when: 2. When no keychain is available or empty, the existing environment-variable
+// path is unaffected and falls back cleanly.
+func TestLinkedIn_FallbackToEnvironmentVariableWhenKeychainEmptyOrUnavailable(t *testing.T) {
+	// Empty keychain provider simulates unset keychain / no secret found
+	mem := keychain.NewMemoryProvider()
+	keychain.SetProvider(mem)
+	defer keychain.ResetProvider()
+
+	const fakeCookie = "li_at=FAKE-ENV-COOKIE-LINKEDIN-1111"
+	t.Setenv(LinkedInCookieEnv, fakeCookie)
+	t.Setenv(LinkedInMinIntervalEnv, "0")
+
+	payload := []byte(`{"source":"linkedin","posts":[{"text":"post from env fallback"}]}`)
+	fixture, _ := sourceFixture(t, payload)
+
+	argsFile := filepath.Join(t.TempDir(), "received-args.txt")
+	t.Setenv(sourceHelperArgsEnv, argsFile)
+
+	store, err := evidence.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileStore failed: %v", err)
+	}
+	reg := sourceRegistry(t, "linkedin", fixture)
+
+	_, err = FetchQuery(context.Background(), store, reg, "linkedin", "acme")
+	if err != nil {
+		t.Fatalf("FetchQuery with env fallback failed: %v", err)
+	}
+
+	received, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("fixture did not record arguments: %v", err)
+	}
+	if !strings.Contains(string(received), fakeCookie) {
+		t.Fatalf("fixture never received the environment variable cookie")
 	}
 }

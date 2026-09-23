@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/aniklavida/words-on-the-street/internal/dashboard"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
 	"github.com/aniklavida/words-on-the-street/internal/fetch"
+	"github.com/aniklavida/words-on-the-street/internal/keychain"
 	"github.com/aniklavida/words-on-the-street/internal/mcpserver"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -34,10 +36,11 @@ func main() {
 	}
 	a := &app.App{Store: store, Registry: loadRegistry()}
 
-	// A configured session cookie is registered with the redaction set before
-	// any command can print or record anything, so the value is scrubbable from
-	// the first boundary onward. The value itself is not kept here.
+	// Configured session cookies are registered with the redaction set before
+	// any command can print or record anything, so values are scrubbable from
+	// the first boundary onward. The values themselves are not kept here.
 	_, _ = fetch.TwitterCookie()
+	_, _ = fetch.LinkedInCookie()
 
 	switch command {
 	case "fetch":
@@ -202,15 +205,13 @@ func main() {
 	case "configure":
 		// The disclosure is the point of configuring a session, not a footnote.
 		// It is plain text at the CLI the user runs before setting the variable,
-		// so the risk is read where the decision is made. It explains the
-		// setting; it does not accept the cookie as an argument, so the value
-		// cannot land in shell history or in a process argument list.
-		if len(os.Args) < 3 || os.Args[2] != "twitter" {
-			fmt.Println("Usage: words-on-the-street configure twitter")
+		// so the risk is read where the decision is made.
+		if len(os.Args) < 3 || (os.Args[2] != "twitter" && os.Args[2] != "linkedin") {
+			fmt.Println("Usage: words-on-the-street configure twitter [--store [cookie]]")
 			fmt.Println("  Prints the ban-risk disclosure for the twitter session cookie.")
 			os.Exit(1)
 		}
-		fmt.Print(twitterDisclosure)
+		handleConfigCommand(os.Args[2], os.Args[3:])
 
 	case "mcp":
 		mcpServer := mcpserver.NewServer(a)
@@ -246,26 +247,19 @@ func main() {
 		}
 
 	case "config":
-		// Configuration is an environment variable, matching the store and
-		// registry. This command is the point of configuration: it shows the
-		// ban-risk disclosure in plain text before the user exports the cookie,
-		// and it never echoes the value.
+		// Configuration is stored in the OS keychain where available, with an
+		// environment variable fallback. This command is the point of configuration:
+		// it shows the ban-risk disclosure in plain text before the user stores or
+		// exports the cookie, and it never echoes the value.
 		if len(os.Args) < 3 {
-			fmt.Println("Usage: words-on-the-street config linkedin")
+			fmt.Println("Usage: words-on-the-street config linkedin [--store [cookie]]")
 			os.Exit(1)
 		}
-		switch os.Args[2] {
-		case "linkedin":
-			fmt.Println(fetch.LinkedInBanRiskDisclosure)
-			if _, err := fetch.LinkedInCookie(); err != nil {
-				fmt.Printf("\nNo cookie is configured yet. Export %s, then run `words-on-the-street fetch linkedin <query>`.\n", fetch.LinkedInCookieEnv)
-			} else {
-				fmt.Printf("\nA cookie is configured in %s. Its value is never printed, recorded, or shown to an agent.\n", fetch.LinkedInCookieEnv)
-			}
-		default:
+		if os.Args[2] != "linkedin" && os.Args[2] != "twitter" {
 			fmt.Printf("Unknown config target: %s\n", os.Args[2])
 			os.Exit(1)
 		}
+		handleConfigCommand(os.Args[2], os.Args[3:])
 
 	case "version":
 		info, ok := debug.ReadBuildInfo()
@@ -314,8 +308,15 @@ not a password, but it grants account access without the password and past
 two-factor authentication. Twitter/X bans accounts permanently and without
 warning for this, so use a separate account you are willing to lose.
 
-The session cookie is read from the environment:
-  WORDS_ON_THE_STREET_TWITTER_COOKIE
+Cookie resolution order:
+  1. OS keychain (words-on-the-street / twitter)
+  2. Environment variable: WORDS_ON_THE_STREET_TWITTER_COOKIE
+
+Store the cookie in the OS keychain:
+  words-on-the-street configure twitter --store
+
+Or export the environment variable:
+  export WORDS_ON_THE_STREET_TWITTER_COOKIE='auth_token=...'
 
 It is never written to an evidence record, a log line, a synthesis output, or
 anything an agent sees.
@@ -330,6 +331,108 @@ and in the docs; the setting is not blocked and needs no acknowledgement.
 No automated login happens. You supply a session you already have, exactly as a
 browser export would.
 `
+
+func parseStoreFlag(args []string) (isStore bool, cookie string, hasCookieArg bool) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--store" {
+			isStore = true
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				cookie = args[i+1]
+				hasCookieArg = true
+			}
+			return
+		}
+		if strings.HasPrefix(arg, "--store=") {
+			isStore = true
+			cookie = strings.TrimPrefix(arg, "--store=")
+			hasCookieArg = true
+			return
+		}
+	}
+	return
+}
+
+func handleConfigCommand(target string, args []string) {
+	isStore, cookieArg, hasCookieArg := parseStoreFlag(args)
+	if isStore {
+		cookie := cookieArg
+		if !hasCookieArg {
+			stat, err := os.Stdin.Stat()
+			isTerminal := err == nil && (stat.Mode()&os.ModeCharDevice) != 0
+			if isTerminal {
+				fmt.Printf("Enter %s session cookie: ", target)
+			}
+			reader := bufio.NewReader(os.Stdin)
+			line, err := reader.ReadString('\n')
+			if err != nil && len(line) == 0 {
+				fmt.Fprintf(os.Stderr, "Error: failed to read cookie from standard input: %v\n", err)
+				os.Exit(1)
+			}
+			cookie = strings.TrimRight(line, "\r\n")
+		}
+		cookie = strings.TrimSpace(cookie)
+		if cookie == "" {
+			fmt.Fprintln(os.Stderr, "Error: cookie value cannot be empty")
+			os.Exit(1)
+		}
+		if strings.ContainsAny(cookie, "\r\n") {
+			fmt.Fprintln(os.Stderr, "Error: cookie value must not contain newlines")
+			os.Exit(1)
+		}
+
+		// Register the secret immediately so no subsequent error or log can leak it.
+		evidence.RegisterSecret(cookie)
+
+		var storeErr error
+		switch target {
+		case "linkedin":
+			storeErr = keychain.SetLinkedInCookie(cookie)
+		case "twitter":
+			storeErr = keychain.SetTwitterCookie(cookie)
+		}
+		if storeErr != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to store cookie in OS keychain: %s\n", evidence.Redact(storeErr.Error()))
+			os.Exit(1)
+		}
+
+		// Never print the cookie back to stdout or stderr.
+		fmt.Printf("Successfully stored %s session cookie in OS keychain.\n", target)
+		return
+	}
+
+	switch target {
+	case "linkedin":
+		fmt.Println(fetch.LinkedInBanRiskDisclosure)
+		var source string
+		if kc, err := keychain.LinkedInCookie(); err == nil && strings.TrimSpace(kc) != "" {
+			source = "the OS keychain"
+		} else if strings.TrimSpace(os.Getenv(fetch.LinkedInCookieEnv)) != "" {
+			source = fetch.LinkedInCookieEnv
+		}
+
+		if source == "" {
+			fmt.Printf("\nNo cookie is configured yet. Store in OS keychain with `words-on-the-street config linkedin --store` or export %s, then run `words-on-the-street fetch linkedin <query>`.\n", fetch.LinkedInCookieEnv)
+		} else {
+			fmt.Printf("\nA cookie is configured in %s. Its value is never printed, recorded, or shown to an agent.\n", source)
+		}
+
+	case "twitter":
+		fmt.Print(twitterDisclosure)
+		var source string
+		if kc, err := keychain.TwitterCookie(); err == nil && strings.TrimSpace(kc) != "" {
+			source = "the OS keychain"
+		} else if strings.TrimSpace(os.Getenv(fetch.TwitterCookieEnv)) != "" {
+			source = fetch.TwitterCookieEnv
+		}
+
+		if source == "" {
+			fmt.Printf("\nNo cookie is configured yet. Store in OS keychain with `words-on-the-street configure twitter --store` or export %s.\n", fetch.TwitterCookieEnv)
+		} else {
+			fmt.Printf("\nA cookie is configured in %s. Its value is never printed, recorded, or shown to an agent.\n", source)
+		}
+	}
+}
 
 // degradationWarning describes a successful fetch that did not use the primary
 // backend. It names the backend that served the bytes and every earlier backend

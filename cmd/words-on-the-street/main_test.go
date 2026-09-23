@@ -612,3 +612,73 @@ func TestCLI_FetchRoutingOverrideRecorded(t *testing.T) {
 		t.Errorf("expected record on disk to have routing_override_reason %q, got %q", overrideReason, rec.RoutingOverrideReason)
 	}
 }
+
+// Done when: 1. A cookie stored in the keychain is read and used for a fetch,
+// without ever needing the environment variable set.
+// Uses a fake/mock keychain backend file for CI, since a real OS keychain isn't
+// scriptable in an automated test.
+func TestCLI_TwitterFetchUsesKeychainCookieWithoutEnvironmentVariable(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+	const fakeCookie = "fake-twitter-cli-keychain-cookie-12345"
+
+	payload := []byte(`{"tweet":"served via keychain in CLI"}`)
+	fixturePath := writeCLIFixture(t, tmpDir, payload)
+	regPath := writeCLIRegistry(t, tmpDir, map[string][]map[string]any{
+		"twitter": {cliHelperBackend(t, "curl")},
+	})
+	storeDir := filepath.Join(tmpDir, "store")
+	keychainFile := filepath.Join(tmpDir, "keychain.json")
+
+	// Store cookie into keychain using configure twitter --store
+	envStore := append(os.Environ(), "WORDS_ON_THE_STREET_TEST_KEYCHAIN="+keychainFile)
+	stdout, stderr, err := runCLI(t, binPath, envStore, "configure", "twitter", "--store", fakeCookie)
+	if err != nil {
+		t.Fatalf("configure twitter --store failed: %v\nstderr: %s", err, stderr)
+	}
+	if strings.Contains(string(stdout)+string(stderr), fakeCookie) {
+		t.Errorf("store command echoed cookie")
+	}
+
+	// Fetch without WORDS_ON_THE_STREET_TWITTER_COOKIE set in env
+	envFetch := append(cliEnv(regPath, storeDir, fixturePath),
+		"WORDS_ON_THE_STREET_TEST_KEYCHAIN="+keychainFile,
+		"WORDS_ON_THE_STREET_TWITTER_RATE_LIMIT=60000",
+	)
+
+	stdout, stderr, err = runCLI(t, binPath, envFetch, "fetch", "twitter", "golang")
+	if err != nil {
+		t.Fatalf("fetch twitter with keychain failed: %v\nstderr: %s", err, stderr)
+	}
+	if !bytes.Equal(stdout, payload) {
+		t.Fatalf("stdout must be exactly the fetched bytes:\ngot:  %q\nwant: %q", stdout, payload)
+	}
+	for _, out := range []string{string(stdout), string(stderr)} {
+		if strings.Contains(out, fakeCookie) {
+			t.Errorf("CLI output contains the cookie")
+		}
+	}
+}
+
+// Done when: 3. The keychain-storage command never prints the cookie value back to
+// stdout/stderr after storing it.
+func TestCLI_ConfigureTwitterStoreNeverEchoesCookie(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+	const fakeCookie = "secret-twitter-cookie-never-echo"
+	keychainFile := filepath.Join(tmpDir, "keychain.json")
+
+	env := append(os.Environ(), "WORDS_ON_THE_STREET_TEST_KEYCHAIN="+keychainFile)
+	stdout, stderr, err := runCLI(t, binPath, env, "configure", "twitter", "--store", fakeCookie)
+	if err != nil {
+		t.Fatalf("configure twitter --store failed: %v\nstderr: %s", err, stderr)
+	}
+
+	combined := string(stdout) + string(stderr)
+	if strings.Contains(combined, fakeCookie) {
+		t.Fatalf("keychain-storage command printed the cookie back to output:\n%s", combined)
+	}
+	if !strings.Contains(combined, "Successfully stored twitter session cookie in OS keychain.") {
+		t.Errorf("expected success message, got:\n%s", combined)
+	}
+}
