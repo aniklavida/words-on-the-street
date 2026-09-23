@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -349,20 +350,29 @@ func (s *FileStore) readLedgerEntries() ([]*Record, error) {
 	defer f.Close()
 
 	var entries []*Record
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
+	// bufio.Reader.ReadString has no line-length ceiling, unlike bufio.Scanner
+	// (whose default token limit is 64KB) — a fetched page's raw payload
+	// routinely exceeds that inside one ledger line.
+	reader := bufio.NewReader(f)
+	for {
+		raw, err := reader.ReadString('\n')
+		line := bytes.TrimSpace([]byte(raw))
+		if len(line) > 0 {
+			var rec Record
+			if unmarshalErr := json.Unmarshal(line, &rec); unmarshalErr != nil {
+				return nil, fmt.Errorf("ledger line parse error: %w", unmarshalErr)
+			}
+			entries = append(entries, &rec)
 		}
-		var rec Record
-		if err := json.Unmarshal(line, &rec); err != nil {
-			return nil, fmt.Errorf("ledger line parse error: %w", err)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
 		}
-		entries = append(entries, &rec)
 	}
 
-	return entries, scanner.Err()
+	return entries, nil
 }
 
 func writeReadOnlyFile(path string, data []byte) error {
