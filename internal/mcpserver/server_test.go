@@ -60,3 +60,44 @@ func TestMCPFetchTool_RedactsRegisteredSecretFromAgentOutput(t *testing.T) {
 		t.Errorf("agent output did not show the redaction placeholder: %q", text)
 	}
 }
+
+func TestMCPFetchTool_PassesRoutingOverride(t *testing.T) {
+	store := evidence.NewMemoryStore()
+	a := &app.App{Store: store}
+
+	handler := FetchToolHandler(a)
+	overrideReason := "User directed MCP agent to use twitter instead of technical forum"
+	request := mcp.CallToolRequest{Params: mcp.CallToolParams{
+		Name: "fetch",
+		Arguments: map[string]interface{}{
+			"url":                     "https://example.com/mcp-override",
+			"backend":                 "echo",
+			"routing_override":        true,
+			"routing_override_reason": overrideReason,
+		},
+	}}
+
+	result, err := handler(context.Background(), request)
+	if err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected successful tool call, got error")
+	}
+
+	records, err := store.List()
+	if err != nil {
+		t.Fatalf("store.List failed: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record in store, got %d", len(records))
+	}
+
+	rec := records[0]
+	if !rec.RoutingOverride {
+		t.Errorf("expected rec.RoutingOverride true, got false")
+	}
+	if rec.RoutingOverrideReason != overrideReason {
+		t.Errorf("expected rec.RoutingOverrideReason %q, got %q", overrideReason, rec.RoutingOverrideReason)
+	}
+}

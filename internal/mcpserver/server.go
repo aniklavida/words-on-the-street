@@ -6,6 +6,7 @@ import (
 
 	"github.com/aniklavida/words-on-the-street/internal/app"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
+	"github.com/aniklavida/words-on-the-street/internal/fetch"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -36,7 +37,14 @@ func FetchToolHandler(a *app.App) server.ToolHandlerFunc {
 			}
 		}
 
-		hash, err := a.Fetch(ctx, backend, args, url, "1.0", false)
+		var opts []fetch.Option
+		override, _ := argsMap["routing_override"].(bool)
+		reason, _ := argsMap["routing_override_reason"].(string)
+		if override || reason != "" {
+			opts = append(opts, fetch.WithRoutingOverride(true, reason))
+		}
+
+		hash, err := a.Fetch(ctx, backend, args, url, "1.0", false, opts...)
 		if err != nil {
 			return mcp.NewToolResultError(evidence.Redact(err.Error())), nil
 		}
@@ -60,6 +68,8 @@ func NewServer(a *app.App) *server.MCPServer {
 		mcp.WithDescription("Fetch a URL using a backend"),
 		mcp.WithString("url", mcp.Required(), mcp.Description("URL to fetch")),
 		mcp.WithString("backend", mcp.Required(), mcp.Description("Backend to use")),
+		mcp.WithBoolean("routing_override", mcp.Description("Whether this fetch was initiated as a user override against routing recommendations")),
+		mcp.WithString("routing_override_reason", mcp.Description("User-supplied rationale when overriding recommended source routing")),
 	)
 
 	s.AddTool(tool, FetchToolHandler(a))

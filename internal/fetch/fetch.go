@@ -14,8 +14,10 @@ import (
 )
 
 type fetchOptions struct {
-	normaliser     evidence.NormaliseFunc
-	normaliserName string
+	normaliser            evidence.NormaliseFunc
+	normaliserName        string
+	routingOverride       bool
+	routingOverrideReason string
 }
 
 // Option configures fetch behavior.
@@ -26,6 +28,15 @@ func WithNormaliser(name string, fn evidence.NormaliseFunc) Option {
 	return func(o *fetchOptions) {
 		o.normaliser = fn
 		o.normaliserName = name
+	}
+}
+
+// WithRoutingOverride records whether a fetch was explicitly performed as a user override
+// against the routing skill recommendation, along with the user-supplied reason.
+func WithRoutingOverride(override bool, reason string) Option {
+	return func(o *fetchOptions) {
+		o.routingOverride = override
+		o.routingOverrideReason = reason
 	}
 }
 
@@ -51,18 +62,20 @@ func Fetch(ctx context.Context, store evidence.Store, backendCmd string, args []
 		payload := []byte(fmt.Sprintf("backend %q is unreachable: %v", backendCmd, lookErr))
 		rawHash := fmt.Sprintf("%x", sha256.Sum256(payload))
 		rec := &evidence.Record{
-			ResolvedURL:     cleanURL,
-			Timestamp:       time.Now().UTC(),
-			Hash:            rawHash,
-			BackendName:     backendCmd,
-			BackendVersion:  "missing",
-			Version:         "missing",
-			BackendStatus:   string(backend.StatusUnreachable),
-			IsFallback:      isFallback,
-			Payload:         payload,
-			RawPayload:      payload,
-			BackendArgs:     cleanArgs,
-			MissingBackends: []string{backendCmd},
+			ResolvedURL:           cleanURL,
+			Timestamp:             time.Now().UTC(),
+			Hash:                  rawHash,
+			BackendName:           backendCmd,
+			BackendVersion:        "missing",
+			Version:               "missing",
+			BackendStatus:         string(backend.StatusUnreachable),
+			IsFallback:            isFallback,
+			RoutingOverride:       options.routingOverride,
+			RoutingOverrideReason: options.routingOverrideReason,
+			Payload:               payload,
+			RawPayload:            payload,
+			BackendArgs:           cleanArgs,
+			MissingBackends:       []string{backendCmd},
 			BackendAttempts: []evidence.BackendAttempt{
 				{
 					BackendName: backendCmd,
@@ -88,17 +101,19 @@ func Fetch(ctx context.Context, store evidence.Store, backendCmd string, args []
 	rawHash := fmt.Sprintf("%x", sha256.Sum256(rawBytes))
 
 	rec := &evidence.Record{
-		ResolvedURL:    cleanURL,
-		Timestamp:      time.Now().UTC(),
-		Hash:           rawHash,
-		BackendName:    backendCmd,
-		BackendVersion: version,
-		Version:        version,
-		BackendStatus:  string(backend.StatusReachable),
-		IsFallback:     isFallback,
-		Payload:        rawBytes,
-		RawPayload:     rawBytes,
-		BackendArgs:    cleanArgs,
+		ResolvedURL:           cleanURL,
+		Timestamp:             time.Now().UTC(),
+		Hash:                  rawHash,
+		BackendName:           backendCmd,
+		BackendVersion:        version,
+		Version:               version,
+		BackendStatus:         string(backend.StatusReachable),
+		IsFallback:            isFallback,
+		RoutingOverride:       options.routingOverride,
+		RoutingOverrideReason: options.routingOverrideReason,
+		Payload:               rawBytes,
+		RawPayload:            rawBytes,
+		BackendArgs:           cleanArgs,
 	}
 
 	// Normalisation is recorded separately so it never destroys what arrived
@@ -195,19 +210,21 @@ func FetchSource(ctx context.Context, store evidence.Store, reg *backend.Registr
 					version = string(report.Status)
 				}
 				rec := &evidence.Record{
-					ResolvedURL:     cleanURL,
-					Timestamp:       time.Now().UTC(),
-					Hash:            rawHash,
-					BackendName:     b.Name,
-					BackendVersion:  version,
-					Version:         version,
-					BackendStatus:   string(report.Status),
-					IsFallback:      isFallback,
-					Payload:         payload,
-					RawPayload:      payload,
-					BackendArgs:     evidence.SanitizeArgs(args),
-					MissingBackends: missingBackends,
-					BackendAttempts: attempts,
+					ResolvedURL:           cleanURL,
+					Timestamp:             time.Now().UTC(),
+					Hash:                  rawHash,
+					BackendName:           b.Name,
+					BackendVersion:        version,
+					Version:               version,
+					BackendStatus:         string(report.Status),
+					IsFallback:            isFallback,
+					RoutingOverride:       options.routingOverride,
+					RoutingOverrideReason: options.routingOverrideReason,
+					Payload:               payload,
+					RawPayload:            payload,
+					BackendArgs:           evidence.SanitizeArgs(args),
+					MissingBackends:       missingBackends,
+					BackendAttempts:       attempts,
 				}
 				if err := store.Save(rec); err != nil {
 					return "", fmt.Errorf("failed to save evidence record for %s backend: %w", report.Status, err)
@@ -235,19 +252,21 @@ func FetchSource(ctx context.Context, store evidence.Store, reg *backend.Registr
 				payload := []byte(fmt.Sprintf("all backends failed for source %q; backend %q execution failed: %v", source, b.Name, execErr))
 				rawHash := fmt.Sprintf("%x", sha256.Sum256(payload))
 				rec := &evidence.Record{
-					ResolvedURL:     cleanURL,
-					Timestamp:       time.Now().UTC(),
-					Hash:            rawHash,
-					BackendName:     b.Name,
-					BackendVersion:  detectedVer,
-					Version:         detectedVer,
-					BackendStatus:   "execution-failed",
-					IsFallback:      isFallback,
-					Payload:         payload,
-					RawPayload:      payload,
-					BackendArgs:     evidence.SanitizeArgs(cmdArgs),
-					MissingBackends: missingBackends,
-					BackendAttempts: attempts,
+					ResolvedURL:           cleanURL,
+					Timestamp:             time.Now().UTC(),
+					Hash:                  rawHash,
+					BackendName:           b.Name,
+					BackendVersion:        detectedVer,
+					Version:               detectedVer,
+					BackendStatus:         "execution-failed",
+					IsFallback:            isFallback,
+					RoutingOverride:       options.routingOverride,
+					RoutingOverrideReason: options.routingOverrideReason,
+					Payload:               payload,
+					RawPayload:            payload,
+					BackendArgs:           evidence.SanitizeArgs(cmdArgs),
+					MissingBackends:       missingBackends,
+					BackendAttempts:       attempts,
 				}
 				_ = store.Save(rec)
 				return rawHash, allBackendsFailedError(source, attempts)
@@ -260,19 +279,21 @@ func FetchSource(ctx context.Context, store evidence.Store, reg *backend.Registr
 		rawHash := fmt.Sprintf("%x", sha256.Sum256(rawBytes))
 
 		rec := &evidence.Record{
-			ResolvedURL:     cleanURL,
-			Timestamp:       time.Now().UTC(),
-			Hash:            rawHash,
-			BackendName:     b.Name,
-			BackendVersion:  detectedVer,
-			Version:         detectedVer,
-			BackendStatus:   string(backend.StatusReachable),
-			IsFallback:      isFallback,
-			Payload:         rawBytes,
-			RawPayload:      rawBytes,
-			BackendArgs:     evidence.SanitizeArgs(cmdArgs),
-			MissingBackends: missingBackends,
-			BackendAttempts: attempts,
+			ResolvedURL:           cleanURL,
+			Timestamp:             time.Now().UTC(),
+			Hash:                  rawHash,
+			BackendName:           b.Name,
+			BackendVersion:        detectedVer,
+			Version:               detectedVer,
+			BackendStatus:         string(backend.StatusReachable),
+			IsFallback:            isFallback,
+			RoutingOverride:       options.routingOverride,
+			RoutingOverrideReason: options.routingOverrideReason,
+			Payload:               rawBytes,
+			RawPayload:            rawBytes,
+			BackendArgs:           evidence.SanitizeArgs(cmdArgs),
+			MissingBackends:       missingBackends,
+			BackendAttempts:       attempts,
 		}
 
 		if options.normaliser != nil {

@@ -130,6 +130,8 @@ func (s *FileStore) Save(rec *Record) error {
 				existingRec.BackendName != rec.BackendName ||
 				existingVersion != version ||
 				existingRec.IsFallback != rec.IsFallback ||
+				existingRec.RoutingOverride != rec.RoutingOverride ||
+				existingRec.RoutingOverrideReason != rec.RoutingOverrideReason ||
 				!bytes.Equal(existingRec.RawBytes(), raw) {
 				return fmt.Errorf("%w: record for hash %s already exists with different data", ErrAppendOnlyViolation, rec.Hash)
 			}
@@ -435,6 +437,8 @@ func (m *MemoryStore) Save(rec *Record) error {
 			existing.BackendName != rec.BackendName ||
 			existingVersion != version ||
 			existing.IsFallback != rec.IsFallback ||
+			existing.RoutingOverride != rec.RoutingOverride ||
+			existing.RoutingOverrideReason != rec.RoutingOverrideReason ||
 			!bytes.Equal(existing.RawBytes(), raw) {
 			return fmt.Errorf("%w: record for hash %s already exists with different data", ErrAppendOnlyViolation, rec.Hash)
 		}

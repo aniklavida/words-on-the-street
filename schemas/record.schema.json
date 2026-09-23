@@ -110,6 +110,14 @@
         "additionalProperties": false
       },
       "description": "Attempts made across backends during failover orchestration."
+    },
+    "routing_override": {
+      "type": "boolean",
+      "description": "Whether this fetch was initiated as a user override against routing recommendations."
+    },
+    "routing_override_reason": {
+      "type": "string",
+      "description": "The user-supplied rationale when overriding recommended source routing."
     }
   },
   "additionalProperties": false

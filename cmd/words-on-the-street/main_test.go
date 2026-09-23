@@ -547,3 +547,68 @@ func TestCLI_TwitterCookieNeverAppearsInOutputOrStore(t *testing.T) {
 		t.Fatal("no evidence files were scanned")
 	}
 }
+
+// Done when: 4. A user-overridden source selection is recorded and distinguishable from a routing-skill-recommended one in the evidence record — proven by a test.
+func TestCLI_FetchRoutingOverrideRecorded(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+
+	payload := []byte(`{"source":"hacker-news","items":[42]}`)
+	fixturePath := writeCLIFixture(t, tmpDir, payload)
+	regPath := writeCLIRegistry(t, tmpDir, map[string][]map[string]any{
+		"hacker-news": {cliHelperBackend(t, "curl")},
+	})
+	storeDir := filepath.Join(tmpDir, "store")
+	env := cliEnv(regPath, storeDir, fixturePath)
+
+	overrideReason := "User chose specific source against routing model recommendation"
+	stdout, stderr, err := runCLI(t, binPath, env, "fetch", "--override", "--override-reason", overrideReason, "hacker-news", "golang")
+	if err != nil {
+		t.Fatalf("fetch with override failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if !bytes.Equal(stdout, payload) {
+		t.Fatalf("stdout mismatch:\ngot:  %q\nwant: %q", stdout, payload)
+	}
+
+	stderrStr := string(stderr)
+	if !strings.Contains(stderrStr, "override: true") {
+		t.Errorf("stderr must report override, got: %s", stderrStr)
+	}
+	if !strings.Contains(stderrStr, overrideReason) {
+		t.Errorf("stderr must report override reason %q, got: %s", overrideReason, stderrStr)
+	}
+
+	// Verify the written evidence record on disk
+	recordLine := ""
+	for _, line := range strings.Split(stderrStr, "\n") {
+		if strings.HasPrefix(line, "record: ") {
+			recordLine = strings.TrimPrefix(line, "record: ")
+			break
+		}
+	}
+	if recordLine == "" {
+		t.Fatalf("stderr did not output record hash: %s", stderrStr)
+	}
+
+	recFile := filepath.Join(storeDir, "records", recordLine+".json")
+	data, err := os.ReadFile(recFile)
+	if err != nil {
+		t.Fatalf("failed to read record file %s: %v", recFile, err)
+	}
+
+	var rec struct {
+		RoutingOverride       bool   `json:"routing_override"`
+		RoutingOverrideReason string `json:"routing_override_reason"`
+	}
+	if err := json.Unmarshal(data, &rec); err != nil {
+		t.Fatalf("failed to unmarshal record JSON: %v", err)
+	}
+
+	if !rec.RoutingOverride {
+		t.Errorf("expected record on disk to have routing_override true, got false")
+	}
+	if rec.RoutingOverrideReason != overrideReason {
+		t.Errorf("expected record on disk to have routing_override_reason %q, got %q", overrideReason, rec.RoutingOverrideReason)
+	}
+}
