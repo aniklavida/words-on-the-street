@@ -176,6 +176,11 @@ func hashBytes(b []byte) string {
 	return fmt.Sprintf("%x", sha256.Sum256(b))
 }
 
+// LineDiff returns a unified-style diff between oldBytes and newBytes.
+func LineDiff(oldBytes, newBytes []byte) string {
+	return lineDiff(oldBytes, newBytes)
+}
+
 func lineDiff(oldBytes, newBytes []byte) string {
 	oldLines := splitLines(oldBytes)
 	newLines := splitLines(newBytes)
