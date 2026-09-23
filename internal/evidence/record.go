@@ -99,9 +99,32 @@ func (r *Record) Validate() error {
 		return fmt.Errorf("%w: backend version is required", ErrMissingField)
 	}
 
+	// A registered secret is refused wherever it appears. The structural checks
+	// below describe credentials by shape; this one catches a value a caller
+	// told us about, which is how a user-supplied session cookie is guarded.
+	if ContainsSecret(r.ResolvedURL) {
+		return fmt.Errorf("%w: registered secret in resolved URL", ErrCredentialLeak)
+	}
+	if ContainsSecret(r.BackendName) {
+		return fmt.Errorf("%w: registered secret in backend name", ErrCredentialLeak)
+	}
+	for _, mb := range r.MissingBackends {
+		if ContainsSecret(mb) {
+			return fmt.Errorf("%w: registered secret in missing backend entry", ErrCredentialLeak)
+		}
+	}
+	for _, attempt := range r.BackendAttempts {
+		if ContainsSecret(attempt.Error) {
+			return fmt.Errorf("%w: registered secret in backend attempt (%s)", ErrCredentialLeak, attempt.BackendName)
+		}
+	}
+
 	for i, arg := range r.BackendArgs {
 		if ArgHasCredentials(arg) {
 			return fmt.Errorf("%w: backend argument contains unredacted credential: %q", ErrCredentialLeak, arg)
+		}
+		if ContainsSecret(arg) {
+			return fmt.Errorf("%w: backend argument contains a registered secret", ErrCredentialLeak)
 		}
 		if isCredentialFlag(arg) && i+1 < len(r.BackendArgs) {
 			if r.BackendArgs[i+1] != "[REDACTED]" {
@@ -120,6 +143,13 @@ func (r *Record) Validate() error {
 		actualHash := fmt.Sprintf("%x", sha256.Sum256(raw))
 		if actualHash != r.Hash {
 			return fmt.Errorf("%w: expected %s, got %s", ErrPayloadMismatch, r.Hash, actualHash)
+		}
+		// Raw bytes are never rewritten -- changing them would break the hash
+		// that makes the record checkable. A registered secret in the payload
+		// is refused instead, so the credential is not recorded and the fetch
+		// is reported as failed rather than silently altered.
+		if ContainsSecret(string(raw)) {
+			return fmt.Errorf("%w: payload contains a registered secret", ErrCredentialLeak)
 		}
 	}
 
@@ -183,7 +213,10 @@ func SanitizeURL(rawURL string) string {
 			u.RawQuery = q.Encode()
 		}
 	}
-	return u.String()
+	// A registered secret that the key-name heuristic did not recognise is
+	// still scrubbed. Structural redaction handles credentials described as
+	// credentials; this handles the value itself.
+	return Redact(u.String())
 }
 
 // HasCredentials returns true if the URL carries user credentials or unredacted sensitive query parameters.
@@ -274,6 +307,13 @@ func SanitizeArgs(args []string) []string {
 
 		// Inline patterns
 		sanitized[i] = redactInlineString(sanitized[i])
+	}
+
+	// Final pass: scrub any registered credential value the structural rules
+	// did not recognise. This is the boundary a user-supplied session cookie
+	// is guarded by, independent of how the backend argument is spelled.
+	for i := range sanitized {
+		sanitized[i] = Redact(sanitized[i])
 	}
 
 	return sanitized

@@ -81,6 +81,16 @@ Consequences, as product requirements:
 There is no automated login, and no bypassing of an access control beyond using
 a session the user knowingly supplied.
 
+**The first session source is Twitter/X.** Its cookie is read from
+`WORDS_ON_THE_STREET_TWITTER_COOKIE`, and `words-on-the-street configure twitter`
+prints the ban-risk disclosure before the user sets it. Requests are limited to
+five per minute by default; the user raises the limit with
+`WORDS_ON_THE_STREET_TWITTER_RATE_LIMIT`, and the risk of raising it is stated
+once rather than gated behind an acknowledgement. The resolver, the configuration
+disclosure and the redaction guard are **implemented and tested**. Live retrieval
+through a supplied session is **experimental**: whether x.com serves usable data
+to a session-fetched page is not something a fixture can prove.
+
 ## 3 · Evidence
 
 Every fetch records:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/aniklavida/words-on-the-street/internal/app"
+	"github.com/aniklavida/words-on-the-street/internal/evidence"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -37,16 +38,18 @@ func FetchToolHandler(a *app.App) server.ToolHandlerFunc {
 
 		hash, err := a.Fetch(ctx, backend, args, url, "1.0", false)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return mcp.NewToolResultError(evidence.Redact(err.Error())), nil
 		}
 
 		rec, err := a.Store.Get(hash)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("evidence discarded: %v", err)), nil
+			return mcp.NewToolResultError(evidence.Redact(fmt.Sprintf("evidence discarded: %v", err))), nil
 		}
 
-		// MCP path does not print a trailing newline unless it's in the payload
-		return mcp.NewToolResultText(string(rec.Payload)), nil
+		// Nothing reaches an agent through a registered credential. The bytes
+		// are scrubbed of any registered secret before this returns, so a
+		// session cookie cannot ride out inside the payload it fetched.
+		return mcp.NewToolResultText(evidence.Redact(string(rec.Payload))), nil
 	}
 }
 

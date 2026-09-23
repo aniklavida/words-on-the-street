@@ -31,6 +31,8 @@ been run.
 - [ ] Removing redaction fails a named test for **each** surface.
 - [ ] The risk of raising a rate limit is disclosed to the user when they raise it, and the setting is not blocked.
 - [ ] The configuration flow shows the risk before accepting a credential.
+- [ ] A session-cookie source sends the credential to the backend and records only the redacted placeholder.
+- [ ] `configure twitter` prints the ban-risk disclosure before the cookie is set.
 
 ## Routing
 

@@ -13,6 +13,7 @@ import (
 	"github.com/aniklavida/words-on-the-street/internal/backend"
 	"github.com/aniklavida/words-on-the-street/internal/dashboard"
 	"github.com/aniklavida/words-on-the-street/internal/evidence"
+	"github.com/aniklavida/words-on-the-street/internal/fetch"
 	"github.com/aniklavida/words-on-the-street/internal/mcpserver"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -32,6 +33,11 @@ func main() {
 		store = fileStore
 	}
 	a := &app.App{Store: store, Registry: loadRegistry()}
+
+	// A configured session cookie is registered with the redaction set before
+	// any command can print or record anything, so the value is scrubbable from
+	// the first boundary onward. The value itself is not kept here.
+	_, _ = fetch.TwitterCookie()
 
 	switch command {
 	case "fetch":
@@ -65,7 +71,7 @@ func main() {
 		}
 
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			fmt.Printf("Error: %s\n", evidence.Redact(err.Error()))
 			os.Exit(1)
 		}
 
@@ -86,7 +92,7 @@ func main() {
 		// record cannot describe different backends. A degraded fetch still
 		// exits 0: succeeding on a fallback is the whole point of the failover.
 		if sourceName != "" && rec.IsFallback {
-			fmt.Fprintf(os.Stderr, "%s\n", degradationWarning(sourceName, rec))
+			fmt.Fprintf(os.Stderr, "%s\n", evidence.Redact(degradationWarning(sourceName, rec)))
 		}
 
 		fmt.Print(string(rec.Payload))
@@ -98,7 +104,7 @@ func main() {
 		}
 		result, err := a.Verify(context.Background(), os.Args[2])
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			fmt.Printf("Error: %s\n", evidence.Redact(err.Error()))
 			os.Exit(1)
 		}
 		fmt.Printf("state: %s\n", result.State)
@@ -151,6 +157,19 @@ func main() {
 			os.Exit(1)
 		}
 
+	case "configure":
+		// The disclosure is the point of configuring a session, not a footnote.
+		// It is plain text at the CLI the user runs before setting the variable,
+		// so the risk is read where the decision is made. It explains the
+		// setting; it does not accept the cookie as an argument, so the value
+		// cannot land in shell history or in a process argument list.
+		if len(os.Args) < 3 || os.Args[2] != "twitter" {
+			fmt.Println("Usage: words-on-the-street configure twitter")
+			fmt.Println("  Prints the ban-risk disclosure for the twitter session cookie.")
+			os.Exit(1)
+		}
+		fmt.Print(twitterDisclosure)
+
 	case "mcp":
 		mcpServer := mcpserver.NewServer(a)
 		if err := server.ServeStdio(mcpServer); err != nil {
@@ -174,7 +193,7 @@ func main() {
 		}
 		ln, err := dashboard.Listen(addr)
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			fmt.Printf("Error: %s\n", evidence.Redact(err.Error()))
 			os.Exit(1)
 		}
 		dash := &dashboard.Server{Records: lister, Registry: a.Registry}
@@ -216,6 +235,37 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+// twitterDisclosure is printed by `configure twitter`, the point where a user
+// learns how to supply the session cookie. It is plain text at the CLI rather
+// than a line in a document, because the risk has to arrive where the decision
+// is made. It states the ban risk and the fact that a cookie is account access
+// without a password; it states the rate-limit risk once and does not gate the
+// setting behind a confirmation, matching the project's "disclosure, not
+// enforcement" decision.
+const twitterDisclosure = `Configuring the twitter source
+
+Twitter/X automated access is against Twitter/X's terms. A session cookie is
+not a password, but it grants account access without the password and past
+two-factor authentication. Twitter/X bans accounts permanently and without
+warning for this, so use a separate account you are willing to lose.
+
+The session cookie is read from the environment:
+  WORDS_ON_THE_STREET_TWITTER_COOKIE
+
+It is never written to an evidence record, a log line, a synthesis output, or
+anything an agent sees.
+
+Requests are limited to 5 per minute by default, which is deliberately
+conservative. Raise the limit with:
+  WORDS_ON_THE_STREET_TWITTER_RATE_LIMIT=<requests-per-minute>
+
+Raising the limit increases the chance of a ban. That risk is stated once, here
+and in the docs; the setting is not blocked and needs no acknowledgement.
+
+No automated login happens. You supply a session you already have, exactly as a
+browser export would.
+`
 
 // degradationWarning describes a successful fetch that did not use the primary
 // backend. It names the backend that served the bytes and every earlier backend

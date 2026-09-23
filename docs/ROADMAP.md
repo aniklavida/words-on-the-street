@@ -72,6 +72,15 @@ the user raises it, and the setting is not blocked.
 
 Only after 8.
 
+Twitter/X is the first. Its resolver, its cookie configuration and the redaction
+guard are **implemented and tested**; live retrieval through a supplied session
+is **experimental**.
+
+*Done when:* the source resolves and records through the same `Sources()` /
+`FetchQuery` path as the open sources; removing redaction fails a named test for
+each surface separately; and the ban risk, including that a cookie grants account
+access without the password, is shown at the point of configuration.
+
 ## 10 · Synthesis
 
 Answers where every claim resolves to a stored record.

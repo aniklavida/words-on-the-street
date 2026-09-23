@@ -184,6 +184,22 @@ var DefaultSources = map[string][]Backend{
 			Licence:      "curl",
 		},
 	},
+	// Twitter/X has no open endpoint for this use. The user supplies their own
+	// already-authenticated session cookie through
+	// WORDS_ON_THE_STREET_TWITTER_COOKIE; there is no automated login and no
+	// access control is bypassed beyond presenting a session the user knowingly
+	// gave. A ban-risk disclosure is printed at the point of configuring it,
+	// and the request rate is conservative by default.
+	"twitter": {
+		{
+			Name:         "curl",
+			Command:      "curl",
+			Args:         []string{"-sSL"},
+			VersionArgs:  []string{"--version"},
+			VersionRange: ">= 7.68.0",
+			Licence:      "curl",
+		},
+	},
 	"github": {
 		{
 			Name:         "gh",
