@@ -126,6 +126,35 @@ func TestCLI_FetchSourceEndToEnd_FixtureBackends(t *testing.T) {
 	}
 }
 
+func TestCLI_WatchReportsEditedContentAndExits(t *testing.T) {
+	binPath := buildCLIBinary(t)
+	tmpDir := t.TempDir()
+	original := []byte("original post content\n")
+	updated := []byte("updated post content\n")
+	fixturePath := writeCLIFixture(t, tmpDir, original)
+	regPath := writeCLIRegistry(t, tmpDir, map[string][]map[string]any{
+		"hacker-news": {cliHelperBackend(t, "fixture")},
+	})
+	storeDir := filepath.Join(tmpDir, "store")
+	env := cliEnv(regPath, storeDir, fixturePath)
+	if _, _, err := runCLI(t, binPath, env, "fetch", "hacker-news", "golang"); err != nil {
+		t.Fatalf("initial fetch failed: %v", err)
+	}
+	if err := os.WriteFile(fixturePath, updated, 0o644); err != nil {
+		t.Fatalf("failed to mutate fixture: %v", err)
+	}
+
+	stdout, stderr, err := runCLI(t, binPath, env, "watch", "hacker-news", "golang")
+	if err != nil {
+		t.Fatalf("watch failed: %v\nstderr: %s", err, stderr)
+	}
+	for _, want := range []string{"edited: 1", "previous_content:", string(original), "current_content:", string(updated)} {
+		if !strings.Contains(string(stdout), want) {
+			t.Errorf("watch output does not contain %q:\n%s", want, stdout)
+		}
+	}
+}
+
 // buildCLIBinary compiles the real command into a temporary directory so the
 // tests below exercise the binary end to end rather than internal functions.
 func buildCLIBinary(t *testing.T) string {

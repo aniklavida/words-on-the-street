@@ -17,6 +17,7 @@ import (
 	"github.com/aniklavida/words-on-the-street/internal/fetch"
 	"github.com/aniklavida/words-on-the-street/internal/keychain"
 	"github.com/aniklavida/words-on-the-street/internal/mcpserver"
+	"github.com/aniklavida/words-on-the-street/internal/watch"
 	"github.com/mark3labs/mcp-go/server"
 )
 
@@ -162,6 +163,18 @@ func main() {
 		if result.Diff != "" {
 			fmt.Printf("diff:\n%s", result.Diff)
 		}
+
+	case "watch":
+		if len(os.Args) < 4 {
+			fmt.Println("Usage: words-on-the-street watch <source> <query>")
+			os.Exit(1)
+		}
+		report, err := watch.Run(context.Background(), store, watch.QueryFetcher{Store: store, Registry: a.Registry}, os.Args[2], os.Args[3])
+		if err != nil {
+			fmt.Printf("Error: %s\n", evidence.Redact(err.Error()))
+			os.Exit(1)
+		}
+		fmt.Print(watch.FormatReport(report))
 
 	case "doctor":
 		reports := backend.CheckAllHealth(context.Background(), a.Registry)
