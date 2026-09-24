@@ -61,6 +61,30 @@ type Result struct {
 	CheckedAt             time.Time `json:"checked_at"`
 }
 
+func Compare(original, current *evidence.Record) (*Result, error) {
+	if original == nil {
+		return nil, fmt.Errorf("original record is required")
+	}
+	if current == nil {
+		return nil, fmt.Errorf("current record is required")
+	}
+
+	result := &Result{
+		OriginalHash:       original.Hash,
+		CurrentHash:        hashBytes(current.RawBytes()),
+		OriginalRecordHash: original.RecordHash,
+		CheckedAt:          time.Now().UTC(),
+	}
+	if bytes.Equal(original.RawBytes(), current.RawBytes()) {
+		result.State = Identical
+		return result, nil
+	}
+
+	result.State = Changed
+	result.Diff = lineDiff(original.RawBytes(), current.RawBytes())
+	return result, nil
+}
+
 // Refetcher retrieves the current bytes for a previously recorded entry.
 type Refetcher interface {
 	Refetch(ctx context.Context, rec *evidence.Record) ([]byte, error)
@@ -130,13 +154,26 @@ func Verify(ctx context.Context, store evidence.Store, refetcher Refetcher, orig
 		return result, nil
 	}
 
-	result.CurrentHash = hashBytes(current)
+	comparison, err := Compare(original, &evidence.Record{
+		ResolvedURL:    original.ResolvedURL,
+		Timestamp:      checkedAt,
+		Hash:           hashBytes(current),
+		BackendName:    original.BackendName,
+		BackendVersion: original.BackendVersion,
+		Version:        original.Version,
+		IsFallback:     original.IsFallback,
+		Payload:        current,
+		RawPayload:     current,
+		BackendArgs:    original.BackendArgs,
+	})
+	if err != nil {
+		return nil, err
+	}
+	comparison.OriginalRecordHash = result.OriginalRecordHash
+	comparison.CheckedAt = result.CheckedAt
+
 	status := StatusVerifiedIdentical
-	if bytes.Equal(original.RawBytes(), current) {
-		result.State = Identical
-	} else {
-		result.State = Changed
-		result.Diff = lineDiff(original.RawBytes(), current)
+	if comparison.State == Changed {
 		status = StatusVerifiedChanged
 	}
 
@@ -144,8 +181,8 @@ func Verify(ctx context.Context, store evidence.Store, refetcher Refetcher, orig
 	if err != nil {
 		return nil, err
 	}
-	result.ObservationRecordHash = observationHash
-	return result, nil
+	comparison.ObservationRecordHash = observationHash
+	return comparison, nil
 }
 
 func recordObservation(store evidence.Store, original *evidence.Record, payload []byte, checkedAt time.Time, status string) (string, error) {
