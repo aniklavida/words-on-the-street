@@ -1,7 +1,7 @@
 # Words on the Street — specification
 
-**Status:** planned. Nothing in this document is implemented.
-**Updated:** 2026-09-18
+**Status:** Core capabilities (evidence store, backend registry, query resolvers, verify, watch, doctor, status, local dashboard, MCP) are **implemented and tested**. Live retrieval through session cookies is **experimental**. Automated synthesis command is **planned**.
+**Updated:** 2026-09-24
 
 ## What it is
 
@@ -141,19 +141,11 @@ daemon.)
 
 ## The claim, and its three limits
 
-**What is proved:** these exact bytes were received from this URL at this time by
-this backend, and whether they have changed since.
+1. **What is proved:** these exact bytes were received from this URL at this time by this backend, and whether they have changed since.
+2. **What is NOT proved:** that the bytes were true, that the source was honest, or that the platform showed the same thing to anyone else. A faithful record of a lie is still a faithful record of a lie.
+3. **What can be scraped is not representative.** People who post are not people. The honest answer to "what do people say about X" is always "the people who wrote something say this."
 
-**What is not proved:** that the bytes were true, that the source was honest, or
-that the platform showed the same thing to anyone else. A faithful record of a
-lie is still a faithful record of a lie.
-
-**What can be scraped is not representative.** People who post are not people.
-Issue trackers are written by those who hit a problem. Professional networks
-contain no criticism. The honest answer to *"what do people say about X"* is
-always *"the people who wrote something say this"*.
-
-All three ship together.
+None of these three sentences may be published without the other two, anywhere in the docs.
 
 ## Version 1.0 scope
 

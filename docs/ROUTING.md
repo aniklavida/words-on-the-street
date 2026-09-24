@@ -232,12 +232,11 @@ Every synthesized answer MUST include:
    against the routing skill's recommendation, with the associated reason.
 4. **`evidence_records`:** The content hash (`record: <hash>`) and resolved URL
    for every factual claim made in the synthesis.
-5. **The three project limits:**
-   - What is proved: bytes, time, hash, backend.
-   - What is not proved: whether the bytes were true or whether the platform
-     served the same to anyone else.
-   - Non-representativeness: posters are not people; issue reporters are not the
-     user base; professional networks contain no criticism.
+5. **The three project limits (which always travel together):**
+   1. **What is proved:** these exact bytes were received from this URL at this time by this backend, and whether they have changed since.
+   2. **What is NOT proved:** that the bytes were true, that the source was honest, or that the platform showed the same thing to anyone else. A faithful record of a lie is still a faithful record of a lie.
+   3. **What can be scraped is not representative.** People who post are not people. The honest answer to "what do people say about X" is always "the people who wrote something say this."
+   None of these three sentences may be published without the other two, anywhere in the docs.
 
 ### Output contract schema (JSON)
 
@@ -349,5 +348,8 @@ Based on 4 forum discussions recorded between January and August:
 
 ### Provenance and Limits
 - Evidence verified: 3 records recorded in local append-only store.
-- Limits: These records prove that these exact bytes were returned from these URLs at the recorded timestamps by the specified backends. They do not prove that the posters' statements were truthful or that the sample represents the majority of employees.
+- Limits:
+  - **What is proved:** these exact bytes were received from this URL at this time by this backend, and whether they have changed since.
+  - **What is NOT proved:** that the bytes were true, that the source was honest, or that the platform showed the same thing to anyone else. A faithful record of a lie is still a faithful record of a lie.
+  - **What can be scraped is not representative.** People who post are not people. The honest answer to "what do people say about X" is always "the people who wrote something say this."
 ```

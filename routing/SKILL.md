@@ -140,10 +140,11 @@ implemented `internal/synthesis` library:
    routing recommendations.
 4. **Attributed claims:** Every factual claim must reference its evidence record
    hash (`record: <hash>`).
-5. **Limits statement:** Must include the three product boundaries:
-   - Bytes, time, and hash are proved.
-   - Truth of the statements is not proved.
-   - Poster unrepresentativeness caveat cannot be omitted.
+5. **Limits statement:** Must include the three project limits together:
+   1. **What is proved:** these exact bytes were received from this URL at this time by this backend, and whether they have changed since.
+   2. **What is NOT proved:** that the bytes were true, that the source was honest, or that the platform showed the same thing to anyone else. A faithful record of a lie is still a faithful record of a lie.
+   3. **What can be scraped is not representative.** People who post are not people. The honest answer to "what do people say about X" is always "the people who wrote something say this."
+   None of these three sentences may be published without the other two, anywhere in the docs.
 
 The `internal/synthesis` library enforces items 4 and 5 mechanically: a claim
 is paired with the record hashes it is attributed to and refused when a hash is
