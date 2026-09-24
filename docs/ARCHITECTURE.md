@@ -1,6 +1,6 @@
 # Architecture
 
-**Status:** planned. Nothing here is implemented.
+**Status:** implemented and tested (core binary, evidence store, external process backends, keychain storage, local dashboard, MCP server).
 
 ## Why a binary and not a skill
 
