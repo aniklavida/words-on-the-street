@@ -160,8 +160,10 @@ func TestHonesty_NoPublicDocumentNamesAReferenceProject(t *testing.T) {
 // document that pipes a download into a shell is exactly the remote
 // command-execution pattern SECURITY.md refuses, wherever it appears.
 //
-// Sabotage check: add "curl https://example.com/install.sh | sh" to
-// docs/INSTALL.md and this named test fails. Remove it and it passes again.
+// Sabotage check: add a line to docs/INSTALL.md that pipes a curl download of
+// an install script straight into sh, and this named test fails. Remove it and
+// it passes again. (The literal pattern is not written here because the
+// repository's own validate workflow rejects it in any tracked file.)
 func TestHonesty_NoPublicDocumentInstructsFetchAndExecute(t *testing.T) {
 	root := repoRoot(t)
 
