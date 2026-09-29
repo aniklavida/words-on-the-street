@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -84,6 +87,112 @@ func TestFetch_RequiresRecord(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when fetching without a store, got nil")
 	}
+}
+
+// Done when: A fetch that skips the evidence record is not expressible — demonstrated by attempting it.
+//
+// The core guarantee is structural: fetch functions return ONLY a content hash
+// string and an error. They do not return payload bytes. Every fetch function
+// strictly requires an evidence.Store interface argument; omitting it or
+// attempting to receive payload bytes directly from Fetch is rejected at compile
+// time as a type error.
+func TestFetch_SkippingEvidenceRecordIsNotExpressible(t *testing.T) {
+	// 1. Structural type verification:
+	storeType := reflect.TypeOf((*evidence.Store)(nil)).Elem()
+
+	for _, tc := range []struct {
+		name string
+		fn   any
+	}{
+		{"Fetch", Fetch},
+		{"FetchSource", FetchSource},
+		{"FetchQuery", FetchQuery},
+	} {
+		ft := reflect.TypeOf(tc.fn)
+		if ft.NumIn() < 2 || ft.In(1) != storeType {
+			t.Errorf("%s does not require evidence.Store as parameter 1", tc.name)
+		}
+		if ft.NumOut() != 2 || ft.Out(0).Kind() != reflect.String || !ft.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+			t.Errorf("%s return type is %v, want (string, error)", tc.name, ft)
+		}
+		for i := 0; i < ft.NumOut(); i++ {
+			if ft.Out(i).Kind() == reflect.Slice && ft.Out(i).Elem().Kind() == reflect.Uint8 {
+				t.Errorf("%s returns []byte directly: payload must only be retrievable from evidence store", tc.name)
+			}
+		}
+	}
+
+	// 2. Demonstration by attempting it against the Go compiler:
+	root := fetchRepoRoot(t)
+	tmpDir, err := os.MkdirTemp(root, ".test-attempt-*")
+	if err != nil {
+		t.Fatalf("failed to create temporary attempt dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	// Attempt A: Calling fetch.Fetch without passing an evidence.Store parameter.
+	attemptNoStore := filepath.Join(tmpDir, "attempt_nostore.go")
+	codeNoStore := `package main
+
+import (
+	"context"
+	"github.com/aniklavida/words-on-the-street/internal/fetch"
+)
+
+func main() {
+	_, _ = fetch.Fetch(context.Background(), "curl", []string{"hi"}, "https://example.com", "1.0", false)
+}
+`
+	if err := os.WriteFile(attemptNoStore, []byte(codeNoStore), 0o600); err != nil {
+		t.Fatalf("failed to write attempt file: %v", err)
+	}
+	cmdA := exec.Command("go", "build", "-o", os.DevNull, attemptNoStore)
+	cmdA.Dir = root
+	outA, errA := cmdA.CombinedOutput()
+	if errA == nil {
+		t.Fatalf("expected compile error when attempting to call Fetch without evidence.Store, but it compiled: %s", outA)
+	}
+	if !strings.Contains(string(outA), "not enough arguments in call to fetch.Fetch") {
+		t.Errorf("expected 'not enough arguments in call to fetch.Fetch', got compiler output:\n%s", outA)
+	}
+
+	// Attempt B: Treating Fetch return value as payload bytes ([]byte).
+	attemptPayload := filepath.Join(tmpDir, "attempt_payload.go")
+	codePayload := `package main
+
+import (
+	"context"
+	"github.com/aniklavida/words-on-the-street/internal/evidence"
+	"github.com/aniklavida/words-on-the-street/internal/fetch"
+)
+
+func main() {
+	var payload []byte
+	payload, _ = fetch.Fetch(context.Background(), evidence.NewMemoryStore(), "curl", []string{"hi"}, "https://example.com", "1.0", false)
+	_ = payload
+}
+`
+	if err := os.WriteFile(attemptPayload, []byte(codePayload), 0o600); err != nil {
+		t.Fatalf("failed to write attempt file: %v", err)
+	}
+	cmdB := exec.Command("go", "build", "-o", os.DevNull, attemptPayload)
+	cmdB.Dir = root
+	outB, errB := cmdB.CombinedOutput()
+	if errB == nil {
+		t.Fatalf("expected compile error when attempting to assign Fetch return to []byte, but it compiled: %s", outB)
+	}
+	if !strings.Contains(string(outB), "cannot use") || !strings.Contains(string(outB), "[]byte") {
+		t.Errorf("expected type mismatch error assigning Fetch return to []byte, got compiler output:\n%s", outB)
+	}
+}
+
+func fetchRepoRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("failed to locate test source file")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
 func TestFetch_AllRequiredFieldsPresent(t *testing.T) {

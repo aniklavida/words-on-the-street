@@ -24,4 +24,20 @@ published as a release, so it is listed here rather than under a version.
 - **Security posture:** egress enumeration tests, hostile configuration validation, and checksummed release workflow.
 - **Documentation:** user guide covering installation, configuration, cookie risks, source costs, and known limitations.
 
+### Unverified — not proven by any test
+
+The following is not proven by any test in this repository. The release notes
+state it plainly rather than implying the opposite:
+
+- **Live retrieval through a user-supplied session** on `twitter` and
+  `linkedin` is **experimental**. Endpoint instability is expected: the
+  platforms may serve a JavaScript hydration shell, redirect to a login or
+  CAPTCHA wall, or invalidate the session. No fixture can prove what a live
+  endpoint returns to a session-fetched request. What a fixture does prove —
+  the resolver, the recorded evidence, and the redaction guard — is tested
+  separately.
+- **An automated end-to-end synthesis command** is not implemented. The
+  synthesis package ships as a tested library; wiring it to a CLI command or an
+  MCP tool is planned.
+
 [Unreleased]: https://github.com/aniklavida/words-on-the-street/commits/main
