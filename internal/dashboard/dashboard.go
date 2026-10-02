@@ -696,86 +696,261 @@ var templateFuncs = template.FuncMap{
 }
 
 const sharedCSS = `
-* { box-sizing: border-box; }
-body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f8fafc; color: #1e293b; line-height: 1.5; font-size: 14px; }
-.layout { display: flex; min-height: 100vh; }
-.sidebar { width: 240px; background-color: #ffffff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; flex-shrink: 0; position: sticky; top: 0; height: 100vh; }
-.sidebar-header { padding: 1.5rem 1.25rem 1rem; border-bottom: 1px solid #f1f5f9; }
-.sidebar-title { font-size: 1.05rem; font-weight: 700; color: #0f172a; margin: 0; letter-spacing: -0.01em; }
-.sidebar-tagline { font-size: 0.75rem; color: #64748b; margin-top: 0.35rem; line-height: 1.35; }
-.sidebar-nav { padding: 1rem 0.75rem; flex: 1; }
-.nav-link { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.85rem; border-radius: 6px; color: #475569; text-decoration: none; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem; transition: background 0.15s, color 0.15s; }
-.nav-link:hover { background-color: #f1f5f9; color: #0f172a; }
-.nav-link.active { background-color: #e6f4ea; color: #137333; font-weight: 600; }
-.nav-icon { width: 18px; height: 18px; flex-shrink: 0; }
-.sidebar-footer { padding: 1.25rem; border-top: 1px solid #f1f5f9; font-size: 0.75rem; background: #fafafa; }
-.status-indicator { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; color: #334155; margin-bottom: 0.2rem; }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; background-color: #16a34a; }
-.sidebar-addr { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #64748b; margin-bottom: 0.4rem; font-size: 0.8rem; }
-.sidebar-note { color: #94a3b8; font-style: italic; }
-.main-content { flex: 1; padding: 2rem 2.5rem; max-width: 1200px; }
-.page-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 0.25rem; }
-.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 1rem; }
-.page-title { font-size: 1.5rem; font-weight: 700; color: #0f172a; margin: 0 0 0.25rem 0; letter-spacing: -0.02em; }
-.page-subtitle { font-size: 0.875rem; color: #64748b; margin: 0; }
-.quote-pill { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.6rem 1rem; font-style: italic; font-size: 0.85rem; color: #475569; font-family: Georgia, serif; box-shadow: 0 1px 2px rgba(0,0,0,0.02); white-space: nowrap; }
-.trust-strip { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.25rem; border-radius: 8px; margin-bottom: 1.5rem; font-size: 0.875rem; }
-.trust-strip.trust-verified { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
-.trust-strip.trust-failed { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-.trust-content { display: flex; align-items: center; gap: 0.5rem; font-weight: 500; }
-.trust-badge { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; opacity: 0.85; }
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.75rem; }
-.stat-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-.stat-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 0.4rem; }
-.stat-value { font-size: 1.75rem; font-weight: 700; color: #0f172a; }
-.stat-sub { font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; }
-.card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-.card-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; background: #fafafa; }
-.card-title { font-size: 0.95rem; font-weight: 600; color: #0f172a; margin: 0; }
-.card-link { font-size: 0.8rem; font-weight: 600; color: #0f766e; text-decoration: none; }
-.card-link:hover { text-decoration: underline; }
-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; }
-th { background: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.65rem 1rem; border-bottom: 1px solid #e2e8f0; }
-td { padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: top; color: #334155; }
+/* ==========================================================================
+   Project Design System Tokens
+   ========================================================================== */
+
+/* ---------- BRAND BLOCK ---------- */
+:root {
+  --brand-h: 60;          /* ochre hue */
+  --brand-c: 0.10;        /* restrained chroma */
+  --brand-l: 0.58;        /* accent lightness light mode */
+  --brand-l-dark: 0.68;   /* accent lightness dark mode */
+  --warmth: 0.012;        /* paper / coal warmth */
+  --neutral-h: var(--brand-h);
+  --radius-scale: 0.9;
+  --density: 1;
+  --font-display: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* ---------- DERIVED COLORS ---------- */
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --bg:      oklch(0.985 var(--warmth) var(--neutral-h));
+  --rail:    oklch(0.955 calc(var(--warmth) * 1.2) var(--neutral-h));
+  --surf:    oklch(0.995 calc(var(--warmth) * 0.5) var(--neutral-h));
+  --subtle:  oklch(0.97  var(--warmth) var(--neutral-h));
+  --bd:      oklch(0.90  var(--warmth) var(--neutral-h));
+  --bd2:     oklch(0.85  var(--warmth) var(--neutral-h));
+  --line:    oklch(0.94  var(--warmth) var(--neutral-h));
+  --act:     oklch(0.92  calc(var(--warmth) * 1.5) var(--neutral-h));
+  --hov:     oklch(0.94  var(--warmth) var(--neutral-h));
+  --chip:    oklch(0.88  var(--warmth) var(--neutral-h));
+  --ink:     oklch(0.22  calc(var(--warmth) * 0.8) var(--neutral-h));
+  --ink2:    oklch(0.32  calc(var(--warmth) * 0.8) var(--neutral-h));
+  --mut:     oklch(0.48  var(--warmth) var(--neutral-h));
+  --faint:   oklch(0.62  var(--warmth) var(--neutral-h));
+  --acc:     oklch(var(--brand-l) var(--brand-c) var(--brand-h));
+  --acc2:    oklch(calc(var(--brand-l) - 0.1) var(--brand-c) var(--brand-h));
+  --accbg:   oklch(0.95 calc(var(--brand-c) * 0.3) var(--brand-h));
+  --on-acc:  #ffffff;
+  --ok:      oklch(0.55 0.12 150);  --okbg:   oklch(0.95 0.04 150);
+  --warn:    oklch(0.62 0.13 75);   --warnbg: oklch(0.96 0.05 75);
+  --bad:     oklch(0.55 0.16 25);   --badbg:  oklch(0.95 0.04 25);
+  --info:    oklch(0.55 0.10 240);  --infobg: oklch(0.95 0.03 240);
+  --backdrop: rgba(0,0,0,0.30);
+  --shadow-menu:  0 12px 32px rgba(0,0,0,0.12);
+  --shadow-modal: 0 24px 60px rgba(0,0,0,0.18);
+  --shadow-card:  0 1px 2px rgba(0,0,0,0.04);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:      oklch(0.17 var(--warmth) var(--neutral-h));
+  --rail:    oklch(0.20 var(--warmth) var(--neutral-h));
+  --surf:    oklch(0.22 var(--warmth) var(--neutral-h));
+  --subtle:  oklch(0.26 var(--warmth) var(--neutral-h));
+  --bd:      oklch(0.31 var(--warmth) var(--neutral-h));
+  --bd2:     oklch(0.37 var(--warmth) var(--neutral-h));
+  --line:    oklch(0.28 var(--warmth) var(--neutral-h));
+  --act:     oklch(0.32 calc(var(--warmth) * 1.5) var(--neutral-h));
+  --hov:     oklch(0.27 var(--warmth) var(--neutral-h));
+  --chip:    oklch(0.32 var(--warmth) var(--neutral-h));
+  --ink:     oklch(0.93 calc(var(--warmth) * 0.6) var(--neutral-h));
+  --ink2:    oklch(0.85 calc(var(--warmth) * 0.6) var(--neutral-h));
+  --mut:     oklch(0.72 var(--warmth) var(--neutral-h));
+  --faint:   oklch(0.58 var(--warmth) var(--neutral-h));
+  --acc:     oklch(var(--brand-l-dark) var(--brand-c) var(--brand-h));
+  --acc2:    oklch(calc(var(--brand-l-dark) + 0.08) var(--brand-c) var(--brand-h));
+  --accbg:   oklch(0.30 calc(var(--brand-c) * 0.4) var(--brand-h));
+  --on-acc:  #ffffff;
+  --ok:      oklch(0.75 0.12 150);  --okbg:   oklch(0.28 0.04 150);
+  --warn:    oklch(0.80 0.12 80);   --warnbg: oklch(0.30 0.05 80);
+  --bad:     oklch(0.72 0.14 25);   --badbg:  oklch(0.30 0.05 25);
+  --info:    oklch(0.75 0.09 240);  --infobg: oklch(0.28 0.04 240);
+  --backdrop: rgba(0,0,0,0.5);
+  --shadow-menu:  0 14px 36px rgba(0,0,0,0.35);
+  --shadow-modal: 0 24px 60px rgba(0,0,0,0.5);
+  --shadow-card:  none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg:      oklch(0.17 var(--warmth) var(--neutral-h));
+    --rail:    oklch(0.20 var(--warmth) var(--neutral-h));
+    --surf:    oklch(0.22 var(--warmth) var(--neutral-h));
+    --subtle:  oklch(0.26 var(--warmth) var(--neutral-h));
+    --bd:      oklch(0.31 var(--warmth) var(--neutral-h));
+    --bd2:     oklch(0.37 var(--warmth) var(--neutral-h));
+    --line:    oklch(0.28 var(--warmth) var(--neutral-h));
+    --act:     oklch(0.32 calc(var(--warmth) * 1.5) var(--neutral-h));
+    --hov:     oklch(0.27 var(--warmth) var(--neutral-h));
+    --chip:    oklch(0.32 var(--warmth) var(--neutral-h));
+    --ink:     oklch(0.93 calc(var(--warmth) * 0.6) var(--neutral-h));
+    --ink2:    oklch(0.85 calc(var(--warmth) * 0.6) var(--neutral-h));
+    --mut:     oklch(0.72 var(--warmth) var(--neutral-h));
+    --faint:   oklch(0.58 var(--warmth) var(--neutral-h));
+    --acc:     oklch(var(--brand-l-dark) var(--brand-c) var(--brand-h));
+    --acc2:    oklch(calc(var(--brand-l-dark) + 0.08) var(--brand-c) var(--brand-h));
+    --accbg:   oklch(0.30 calc(var(--brand-c) * 0.4) var(--brand-h));
+    --on-acc:  #ffffff;
+    --ok:      oklch(0.75 0.12 150);  --okbg:   oklch(0.28 0.04 150);
+    --warn:    oklch(0.80 0.12 80);   --warnbg: oklch(0.30 0.05 80);
+    --bad:     oklch(0.72 0.14 25);   --badbg:  oklch(0.30 0.05 25);
+    --info:    oklch(0.75 0.09 240);  --infobg: oklch(0.28 0.04 240);
+    --backdrop: rgba(0,0,0,0.5);
+    --shadow-menu:  0 14px 36px rgba(0,0,0,0.35);
+    --shadow-modal: 0 24px 60px rgba(0,0,0,0.5);
+    --shadow-card:  none;
+  }
+}
+
+/* ---------- SCALE & METRICS ---------- */
+:root {
+  --fs-xs: 11px; --fs-sm: 12.5px; --fs-base: 14px; --fs-md: 16px; --fs-lg: 20px; --fs-xl: 24px; --fs-2xl: 28px; --fs-3xl: 40px; --fs-4xl: 56px;
+  --lh-tight: 1.15; --lh: 1.45; --lh-loose: 1.6;
+  --sp-1: calc(4px * var(--density)); --sp-2: calc(8px * var(--density)); --sp-3: calc(12px * var(--density)); --sp-4: calc(16px * var(--density)); --sp-5: calc(20px * var(--density)); --sp-6: calc(24px * var(--density)); --sp-8: calc(32px * var(--density));
+  --r-xs: calc(4px * var(--radius-scale)); --r-sm: calc(7px * var(--radius-scale)); --r-md: calc(10px * var(--radius-scale)); --r-lg: calc(14px * var(--radius-scale)); --r-xl: calc(18px * var(--radius-scale)); --r-pill: 999px;
+  --h-xs: 28px; --h-sm: 32px; --h-md: 36px; --h-lg: 40px; --h-xl: 48px;
+  --ease: cubic-bezier(.2,.7,.2,1); --t-fast: 120ms; --t: 180ms; --t-slow: 280ms;
+}
+
+/* ---------- RESET & BASE ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: var(--fs-base); line-height: var(--lh); -webkit-font-smoothing: antialiased; }
+a { color: var(--acc); text-decoration: none; }
+a:hover { color: var(--acc2); text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+/* ---------- STRUCTURE ---------- */
+.layout { display: flex; flex-direction: column; min-height: 100vh; }
+.sidebar { width: 100%; background: var(--rail); border-bottom: 1px solid var(--bd); display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-header { padding: 1.25rem 1.25rem 1rem; border-bottom: 1px solid var(--bd); }
+.sidebar-title { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; color: var(--ink); margin: 0; letter-spacing: -0.01em; }
+.sidebar-tagline { font-size: var(--fs-xs); color: var(--mut); margin-top: 0.35rem; line-height: 1.35; }
+.sidebar-nav { padding: 0.75rem 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.nav-link { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.5rem 0.85rem; border-radius: var(--r-sm); color: var(--mut); text-decoration: none; font-size: var(--fs-sm); font-weight: 500; min-height: 40px; min-width: 44px; transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
+.nav-link:hover { background: var(--hov); color: var(--ink); text-decoration: none; }
+.nav-link.active { background: var(--act); color: var(--ink); font-weight: 600; }
+.sidebar-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--bd); font-size: var(--fs-xs); background: var(--rail); display: flex; flex-direction: column; gap: 0.5rem; }
+.status-indicator { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; color: var(--ink); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background-color: var(--ok); flex-shrink: 0; }
+.sidebar-addr { font-family: var(--font-mono); color: var(--mut); font-size: var(--fs-xs); }
+.sidebar-note { color: var(--faint); font-style: italic; }
+.theme-toggle-btn { display: inline-flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.75rem; border-radius: var(--r-sm); border: 1px solid var(--bd); background: var(--surf); color: var(--ink); font-family: var(--font-ui); font-size: var(--fs-xs); cursor: pointer; min-height: 40px; min-width: 44px; transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
+.theme-toggle-btn:hover { background: var(--hov); border-color: var(--bd2); }
+
+@media (min-width: 900px) {
+  .layout { flex-direction: row; }
+  .sidebar { width: 240px; min-height: 100vh; height: 100vh; position: sticky; top: 0; border-right: 1px solid var(--bd); border-bottom: none; }
+  .sidebar-nav { flex-direction: column; padding: 1rem 0.75rem; flex: 1; flex-wrap: nowrap; gap: 0.25rem; }
+  .nav-link { display: flex; justify-content: flex-start; }
+}
+
+/* ---------- MAIN CONTENT ---------- */
+.main-content { flex: 1; padding: 1.5rem 1rem; max-width: 1200px; min-width: 0; width: 100%; }
+@media (min-width: 900px) {
+  .main-content { padding: 2rem 2.5rem; }
+}
+
+.page-label { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 0.25rem; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
+.page-header-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.page-title { font-family: var(--font-display); font-size: var(--fs-2xl); font-weight: 600; color: var(--ink); margin: 0 0 0.25rem 0; letter-spacing: -0.02em; line-height: var(--lh-tight); }
+.page-subtitle { font-size: var(--fs-sm); color: var(--mut); margin: 0; max-width: 680px; }
+.quote-pill { background: var(--surf); border: 1px solid var(--bd); border-radius: var(--r-md); padding: 0.5rem 0.85rem; font-style: italic; font-size: var(--fs-sm); color: var(--mut); box-shadow: var(--shadow-card); white-space: nowrap; }
+
+/* ---------- BUTTONS ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; min-width: 44px; padding: 0.4rem 1rem; border-radius: var(--r-md); font-family: var(--font-ui); font-size: var(--fs-sm); font-weight: 500; border: 1px solid transparent; cursor: pointer; text-decoration: none; transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); white-space: nowrap; }
+.btn-primary { background: var(--acc); color: var(--on-acc); border-color: var(--acc); }
+.btn-primary:hover { background: var(--acc2); border-color: var(--acc2); text-decoration: none; }
+.btn-secondary { background: var(--surf); color: var(--ink); border-color: var(--bd); }
+.btn-secondary:hover { background: var(--hov); border-color: var(--bd2); text-decoration: none; }
+
+/* ---------- TRUST STRIP ---------- */
+.trust-strip { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.25rem; border-radius: var(--r-md); margin-bottom: 1.5rem; font-size: var(--fs-sm); gap: 0.75rem; flex-wrap: wrap; min-width: 0; max-width: 100%; word-break: break-word; overflow-wrap: anywhere; }
+.trust-strip.trust-verified { background: var(--okbg); border: 1px solid var(--ok); color: var(--ok); }
+.trust-strip.trust-failed { background: var(--badbg); border: 1px solid var(--bad); color: var(--bad); }
+.trust-content { display: flex; align-items: center; gap: 0.5rem; font-weight: 500; min-width: 0; flex: 1 1 200px; word-break: break-word; overflow-wrap: anywhere; }
+.trust-content span { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
+.trust-badge { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; opacity: 0.9; white-space: nowrap; flex-shrink: 0; }
+
+/* ---------- STATS GRID ---------- */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 1rem; margin-bottom: 1.75rem; }
+.stat-card { background: var(--surf); border: 1px solid var(--bd); border-radius: var(--r-lg); padding: 1.25rem; box-shadow: var(--shadow-card); }
+.stat-label { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); margin-bottom: 0.4rem; }
+.stat-value { font-size: var(--fs-2xl); font-weight: 600; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.stat-sub { font-size: var(--fs-xs); color: var(--mut); margin-top: 0.25rem; }
+
+/* ---------- CARDS & TABLES ---------- */
+.card { background: var(--surf); border: 1px solid var(--bd); border-radius: var(--r-lg); margin-bottom: 1.5rem; overflow: hidden; box-shadow: var(--shadow-card); }
+.card-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--bd); background: var(--subtle); gap: 0.5rem; flex-wrap: wrap; }
+.card-title { font-size: var(--fs-md); font-weight: 600; color: var(--ink); margin: 0; }
+.card-link { font-size: var(--fs-sm); font-weight: 500; color: var(--acc); text-decoration: none; min-height: 40px; display: inline-flex; align-items: center; }
+.card-link:hover { color: var(--acc2); text-decoration: underline; }
+
+.table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--fs-sm); }
+th { background: var(--subtle); color: var(--mut); font-weight: 600; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.65rem 1rem; border-bottom: 1px solid var(--bd); white-space: nowrap; }
+td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink); white-space: nowrap; }
 tr:last-child td { border-bottom: none; }
-tr:hover td { background-color: #f8fafc; }
-a.table-link { color: #0f766e; text-decoration: none; font-weight: 500; }
-a.table-link:hover { text-decoration: underline; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.8rem; word-break: break-all; }
-.badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
-.badge-healthy, .badge-identical { background: #dcfce7; color: #15803d; }
-.badge-degraded, .badge-changed { background: #fef3c7; color: #b45309; }
-.badge-down, .badge-gone { background: #fee2e2; color: #b91c1c; }
-.badge-primary { background: #dcfce7; color: #15803d; }
-.badge-fallback { background: #fef3c7; color: #b45309; }
-.badge-subtle { background: #f1f5f9; color: #475569; }
-.sources-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.source-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-.source-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+tr:hover td { background-color: var(--hov); }
+a.table-link { color: var(--acc); text-decoration: none; font-weight: 500; white-space: nowrap; }
+a.table-link:hover { color: var(--acc2); text-decoration: underline; }
+.mono { font-family: var(--font-mono); font-size: var(--fs-sm); }
+td.mono { white-space: nowrap; }
+.detail-value.mono { word-break: break-all; }
+
+/* ---------- BADGES ---------- */
+.badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.55rem; border-radius: var(--r-xs); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; line-height: 1.2; }
+.badge-healthy, .badge-identical { background: var(--okbg); color: var(--ok); }
+.badge-degraded, .badge-changed { background: var(--warnbg); color: var(--warn); }
+.badge-down, .badge-gone { background: var(--badbg); color: var(--bad); }
+.badge-primary { background: var(--okbg); color: var(--ok); }
+.badge-fallback { background: var(--warnbg); color: var(--warn); }
+.badge-subtle { background: var(--subtle); color: var(--mut); }
+
+/* ---------- SOURCES ---------- */
+.sources-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.source-card { background: var(--surf); border: 1px solid var(--bd); border-radius: var(--r-lg); padding: 1.25rem; box-shadow: var(--shadow-card); }
+.source-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; gap: 0.5rem; }
 .source-info { display: flex; align-items: center; gap: 0.6rem; }
-.source-avatar { width: 32px; height: 32px; border-radius: 6px; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; flex-shrink: 0; }
-.source-name { font-weight: 600; font-size: 0.95rem; color: #0f172a; }
-.source-meta-row { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.4rem; }
-.source-meta-label { color: #64748b; }
-.source-meta-value { color: #1e293b; font-weight: 500; }
-.source-reports { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #f1f5f9; font-size: 0.75rem; }
-.report-item { margin-bottom: 0.35rem; }
-.report-name { font-weight: 600; }
-.empty-state { padding: 3rem 1.5rem; text-align: center; color: #64748b; font-size: 0.9rem; }
-.back-link { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; color: #0f766e; text-decoration: none; margin-bottom: 1.25rem; }
-.back-link:hover { text-decoration: underline; }
-.detail-grid { display: grid; grid-template-columns: 180px 1fr; gap: 0.75rem 1.5rem; padding: 1.25rem; font-size: 0.875rem; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem; }
-.detail-label { color: #64748b; font-weight: 500; }
-.detail-value { color: #0f172a; word-break: break-all; }
-.detail-footer-quotes { display: flex; justify-content: space-between; font-size: 0.8rem; color: #94a3b8; font-style: italic; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; }
-.diff-container { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
-.diff-header-bar { padding: 0.75rem 1.25rem; background: #fafafa; border-bottom: 1px solid #e2e8f0; font-weight: 600; font-size: 0.85rem; color: #0f172a; }
-.diff-view { padding: 0.75rem 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.85rem; line-height: 1.5; overflow-x: auto; }
+.source-avatar { width: 32px; height: 32px; border-radius: var(--r-sm); color: var(--ink); background: var(--chip); border: 1px solid var(--bd); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: var(--fs-base); text-transform: uppercase; flex-shrink: 0; }
+.source-name { font-weight: 600; font-size: var(--fs-md); color: var(--ink); }
+.source-meta-row { display: flex; justify-content: space-between; font-size: var(--fs-sm); margin-bottom: 0.4rem; gap: 0.5rem; }
+.source-meta-label { color: var(--mut); }
+.source-meta-value { color: var(--ink); font-weight: 500; }
+.source-reports { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--line); font-size: var(--fs-xs); }
+.report-item { margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.report-name { font-weight: 600; color: var(--ink); }
+
+/* ---------- STATES & DETAILS ---------- */
+.empty-state { padding: 3rem 1.5rem; text-align: center; color: var(--mut); font-size: var(--fs-sm); }
+.back-link { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--fs-sm); font-weight: 500; color: var(--acc); text-decoration: none; margin-bottom: 1.25rem; min-height: 40px; }
+.back-link:hover { color: var(--acc2); text-decoration: underline; }
+
+.detail-grid { display: grid; grid-template-columns: minmax(140px, 180px) 1fr; gap: 0.75rem 1.5rem; padding: 1.25rem; font-size: var(--fs-sm); background: var(--surf); border: 1px solid var(--bd); border-radius: var(--r-lg); margin-bottom: 1.5rem; }
+@media (max-width: 639px) {
+  .detail-grid { grid-template-columns: 1fr; gap: 0.35rem 0; }
+  .detail-label { margin-top: 0.75rem; }
+  .detail-label:first-child { margin-top: 0; }
+}
+.detail-label { color: var(--mut); font-weight: 500; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.05em; }
+.detail-value { color: var(--ink); word-break: break-all; }
+.detail-footer-quotes { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--faint); font-style: italic; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bd); flex-wrap: wrap; gap: 0.5rem; }
+
+/* ---------- DIFF CONTAINER ---------- */
+.diff-container { background: var(--surf); border: 1px solid var(--bd); border-radius: var(--r-lg); margin-bottom: 1.5rem; overflow: hidden; }
+.diff-header-bar { padding: 0.75rem 1.25rem; background: var(--subtle); border-bottom: 1px solid var(--bd); font-weight: 600; font-size: var(--fs-sm); color: var(--ink); }
+.diff-view { padding: 0.75rem 0; font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.5; overflow-x: auto; }
 .diff-line { padding: 0.15rem 1.25rem; white-space: pre-wrap; word-break: break-all; }
-.diff-line.diff-removed { background-color: #fee2e2; color: #991b1b; }
-.diff-line.diff-added { background-color: #dcfce7; color: #166534; }
-.diff-line.diff-header { background-color: #f1f5f9; color: #64748b; font-weight: 600; }
-.diff-line.diff-context { color: #334155; }
+.diff-line.diff-removed { background-color: var(--badbg); color: var(--bad); }
+.diff-line.diff-added { background-color: var(--okbg); color: var(--ok); }
+.diff-line.diff-header { background-color: var(--subtle); color: var(--mut); font-weight: 600; }
+.diff-line.diff-context { color: var(--ink); }
 `
 
 const layoutHeader = `<!doctype html>
@@ -783,7 +958,17 @@ const layoutHeader = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Words on the Street — Local Dashboard</title>
+<title>Words on the Street — Local dashboard</title>
+<script>
+(function() {
+  try {
+    var stored = localStorage.getItem('wot-theme');
+    if (stored === 'dark' || stored === 'light') {
+      document.documentElement.setAttribute('data-theme', stored);
+    }
+  } catch(e) {}
+})();
+</script>
 <style>` + sharedCSS + `</style>
 </head>
 <body>
@@ -793,28 +978,19 @@ const layoutHeader = `<!doctype html>
       <div class="sidebar-title">Words on the Street</div>
       <div class="sidebar-tagline">What people are saying, and proof they said it.</div>
     </div>
-    <nav class="sidebar-nav">
-      <a href="/" class="nav-link {{if eq .ActiveNav "overview"}}active{{end}}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>
-        <span>Overview</span>
-      </a>
-      <a href="/fetches" class="nav-link {{if eq .ActiveNav "fetches"}}active{{end}}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h12v12H4z"/><path d="M7 8h6M7 12h4"/></svg>
-        <span>Fetches</span>
-      </a>
-      <a href="/verifications" class="nav-link {{if eq .ActiveNav "verifications"}}active{{end}}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 2l6 3v5c0 4.5-3 8-6 9-3-1-6-4.5-6-9V5l6-3z"/><path d="M8 10l2 2 3-3"/></svg>
-        <span>Verifications</span>
-      </a>
-      <a href="/sources" class="nav-link {{if eq .ActiveNav "sources"}}active{{end}}">
-        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="10" cy="5" rx="7" ry="2.5"/><path d="M3 5v5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5"/><path d="M3 10v5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-5"/></svg>
-        <span>Sources</span>
-      </a>
+    <nav class="sidebar-nav" aria-label="Main navigation">
+      <a href="/" class="nav-link {{if eq .ActiveNav "overview"}}active{{end}}">Overview</a>
+      <a href="/fetches" class="nav-link {{if eq .ActiveNav "fetches"}}active{{end}}">Fetches</a>
+      <a href="/verifications" class="nav-link {{if eq .ActiveNav "verifications"}}active{{end}}">Verifications</a>
+      <a href="/sources" class="nav-link {{if eq .ActiveNav "sources"}}active{{end}}">Sources</a>
     </nav>
     <div class="sidebar-footer">
+      <button type="button" class="theme-toggle-btn" onclick="toggleTheme()" aria-label="Toggle visual theme">
+        <span id="theme-toggle-text">Theme: Light</span>
+      </button>
       <div class="status-indicator">
         <span class="status-dot"></span>
-        <span class="status-text">Local Dashboard</span>
+        <span class="status-text">Local dashboard</span>
       </div>
       <div class="sidebar-addr mono">{{.LoopbackAddr}}</div>
       <div class="sidebar-note">Evidence on your machine. Always.</div>
@@ -826,6 +1002,33 @@ const layoutHeader = `<!doctype html>
 const layoutFooter = `
   </main>
 </div>
+<script>
+function toggleTheme() {
+  try {
+    var cur = document.documentElement.getAttribute('data-theme');
+    if (!cur) {
+      cur = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('wot-theme', next);
+    updateThemeLabel(next);
+  } catch(e) {}
+}
+function updateThemeLabel(theme) {
+  var el = document.getElementById('theme-toggle-text');
+  if (el) el.textContent = theme === 'dark' ? 'Theme: Dark' : 'Theme: Light';
+}
+(function() {
+  try {
+    var cur = document.documentElement.getAttribute('data-theme');
+    if (!cur) {
+      cur = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    updateThemeLabel(cur);
+  } catch(e) {}
+})();
+</script>
 </body>
 </html>
 `
@@ -837,7 +1040,10 @@ const overviewBodyHTML = `
     <h1 class="page-title">A record of the internet, as it was.</h1>
     <p class="page-subtitle">Live view of fetches, verifications and source health from your local Words on the Street instance.</p>
   </div>
-  <div class="quote-pill">"Evidence outlives claims."</div>
+  <div class="page-header-actions">
+    <div class="quote-pill">"Evidence outlives claims."</div>
+    <a href="/fetches" class="btn btn-primary">Browse fetches</a>
+  </div>
 </div>
 
 <div class="trust-strip {{if .TrustVerified}}trust-verified{{else}}trust-failed{{end}}">
@@ -845,22 +1051,22 @@ const overviewBodyHTML = `
     <span>{{if .TrustVerified}}✓{{else}}✕{{end}}</span>
     <span>{{.TrustMessage}}</span>
   </div>
-  <span class="trust-badge">{{if .TrustVerified}}Tamper-evident{{else}}Integrity Alert{{end}}</span>
+  <span class="trust-badge">{{if .TrustVerified}}Tamper-evident{{else}}Integrity alert{{end}}</span>
 </div>
 
 <div class="stats-grid">
   <div class="stat-card">
-    <div class="stat-label">Total Fetches</div>
+    <div class="stat-label">Total fetches</div>
     <div class="stat-value">{{.FetchesTotal}}</div>
     <div class="stat-sub">recorded in append-only ledger</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">Total Verifications</div>
+    <div class="stat-label">Total verifications</div>
     <div class="stat-value">{{.VerifyTotal}}</div>
     <div class="stat-sub">comparisons performed</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">Sources Monitored</div>
+    <div class="stat-label">Sources monitored</div>
     <div class="stat-value">{{len .Statuses}}</div>
     <div class="stat-sub">{{.HealthyCount}} healthy · {{.DegradedCount}} degraded · {{.DownCount}} down</div>
   </div>
@@ -868,7 +1074,7 @@ const overviewBodyHTML = `
 
 <div class="card">
   <div class="card-header">
-    <h2 class="card-title">Source Health</h2>
+    <h2 class="card-title">Source health</h2>
     <a href="/sources" class="card-link">View all &rarr;</a>
   </div>
   <div style="padding: 1.25rem;">
@@ -877,7 +1083,7 @@ const overviewBodyHTML = `
       <div class="source-card" data-source="{{.Source}}" data-state="{{.State}}">
         <div class="source-card-header">
           <div class="source-info">
-            <span class="source-avatar" style="background-color: {{avatarBg .Source}};">{{initial .Source}}</span>
+            <span class="source-avatar">{{initial .Source}}</span>
             <span class="source-name mono" data-source="{{.Source}}">{{.Source}}</span>
           </div>
           <span class="badge badge-{{.State}}" data-state="{{.State}}">{{.State}}</span>
@@ -900,69 +1106,75 @@ const overviewBodyHTML = `
 
 <div class="card">
   <div class="card-header">
-    <h2 class="card-title">Recent Activity</h2>
+    <h2 class="card-title">Recent activity</h2>
   </div>
-  <table>
-    <thead><tr><th>Time (UTC)</th><th>Type</th><th>Resolved URL</th><th>Detail</th><th>Status</th></tr></thead>
-    <tbody>
-      {{range .RecentActivity}}
-      <tr>
-        <td class="mono"><a class="table-link" href="{{if eq .Type "fetch"}}/fetches/{{.Hash}}{{else}}/verifications/{{.Hash}}{{end}}">{{formatTime .Timestamp}}</a></td>
-        <td><span class="badge badge-subtle">{{.Type}}</span></td>
-        <td class="mono"><a class="table-link" href="{{if eq .Type "fetch"}}/fetches/{{.Hash}}{{else}}/verifications/{{.Hash}}{{end}}">{{.ResolvedURL}}</a></td>
-        <td class="mono">{{.Detail}}</td>
-        <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
-      </tr>
-      {{else}}
-      <tr><td colspan="5" class="empty-state">No activity recorded yet.</td></tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time (UTC)</th><th>Type</th><th>Resolved URL</th><th>Detail</th><th>Status</th></tr></thead>
+      <tbody>
+        {{range .RecentActivity}}
+        <tr>
+          <td class="mono"><a class="table-link" href="{{if eq .Type "fetch"}}/fetches/{{.Hash}}{{else}}/verifications/{{.Hash}}{{end}}">{{formatTime .Timestamp}}</a></td>
+          <td><span class="badge badge-subtle">{{.Type}}</span></td>
+          <td class="mono"><a class="table-link" href="{{if eq .Type "fetch"}}/fetches/{{.Hash}}{{else}}/verifications/{{.Hash}}{{end}}">{{.ResolvedURL}}</a></td>
+          <td class="mono">{{.Detail}}</td>
+          <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="empty-state">No activity recorded yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <div class="card">
   <div class="card-header">
-    <h2 class="card-title">Recent Fetches</h2>
+    <h2 class="card-title">Recent fetches</h2>
     <a href="/fetches" class="card-link">View all &rarr;</a>
   </div>
-  <table>
-    <thead><tr><th>Time (UTC)</th><th>Resolved URL</th><th>Backend</th><th>Path</th><th>Recorded arguments</th></tr></thead>
-    <tbody>
-      {{range .Fetches}}
-      <tr>
-        <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{formatTime .Timestamp}}</a></td>
-        <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{.ResolvedURL}}</a></td>
-        <td class="mono">{{.Backend}}</td>
-        <td><span class="badge badge-{{if .Fallback}}fallback{{else}}primary{{end}}">{{if .Fallback}}fallback{{else}}primary{{end}}</span></td>
-        <td class="mono">{{range .Args}}{{.}} {{end}}</td>
-      </tr>
-      {{else}}
-      <tr><td colspan="5" class="empty-state">No fetches recorded yet.</td></tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time (UTC)</th><th>Resolved URL</th><th>Backend</th><th>Path</th><th>Recorded arguments</th></tr></thead>
+      <tbody>
+        {{range .Fetches}}
+        <tr>
+          <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{formatTime .Timestamp}}</a></td>
+          <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{.ResolvedURL}}</a></td>
+          <td class="mono">{{.Backend}}</td>
+          <td><span class="badge badge-{{if .Fallback}}fallback{{else}}primary{{end}}">{{if .Fallback}}fallback{{else}}primary{{end}}</span></td>
+          <td class="mono">{{range .Args}}{{.}} {{end}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="empty-state">No fetches recorded yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <div class="card">
   <div class="card-header">
-    <h2 class="card-title">Recent Verifications</h2>
+    <h2 class="card-title">Recent verifications</h2>
     <a href="/verifications" class="card-link">View all &rarr;</a>
   </div>
-  <table>
-    <thead><tr><th>Time (UTC)</th><th>State</th><th>Resolved URL</th><th>Observation record</th></tr></thead>
-    <tbody>
-      {{range .Verifications}}
-      <tr>
-        <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{formatTime .Timestamp}}</a></td>
-        <td><span class="badge badge-{{.State}}">{{.State}}</span></td>
-        <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{.ResolvedURL}}</a></td>
-        <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{shortHash .ObservationHash}}</a></td>
-      </tr>
-      {{else}}
-      <tr><td colspan="4" class="empty-state">No verifications recorded yet.</td></tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time (UTC)</th><th>State</th><th>Resolved URL</th><th>Observation record</th></tr></thead>
+      <tbody>
+        {{range .Verifications}}
+        <tr>
+          <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{formatTime .Timestamp}}</a></td>
+          <td><span class="badge badge-{{.State}}">{{.State}}</span></td>
+          <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{.ResolvedURL}}</a></td>
+          <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{shortHash .ObservationHash}}</a></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="4" class="empty-state">No verifications recorded yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
 </div>
 `
 
@@ -973,40 +1185,45 @@ const fetchesBodyHTML = `
     <h1 class="page-title">Fetches</h1>
     <p class="page-subtitle">Full record of external content retrieved and preserved in the evidence store ({{.FetchesTotal}} total).</p>
   </div>
+  <div class="page-header-actions">
+    <a href="/verifications" class="btn btn-primary">Audit verifications</a>
+  </div>
 </div>
 
 <div class="card">
-  <table>
-    <thead><tr><th>Time (UTC)</th><th>Resolved URL</th><th>Backend</th><th>Path</th><th>Recorded arguments</th><th>Content Hash</th></tr></thead>
-    <tbody>
-      {{range .Fetches}}
-      <tr>
-        <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{formatTime .Timestamp}}</a></td>
-        <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{.ResolvedURL}}</a></td>
-        <td class="mono">{{.Backend}}</td>
-        <td><span class="badge badge-{{if .Fallback}}fallback{{else}}primary{{end}}">{{if .Fallback}}fallback{{else}}primary{{end}}</span></td>
-        <td class="mono">{{range .Args}}{{.}} {{end}}</td>
-        <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{shortHash .Hash}}</a></td>
-      </tr>
-      {{else}}
-      <tr><td colspan="6" class="empty-state">No fetches recorded yet.</td></tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time (UTC)</th><th>Resolved URL</th><th>Backend</th><th>Path</th><th>Recorded arguments</th><th>Content hash</th></tr></thead>
+      <tbody>
+        {{range .Fetches}}
+        <tr>
+          <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{formatTime .Timestamp}}</a></td>
+          <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{.ResolvedURL}}</a></td>
+          <td class="mono">{{.Backend}}</td>
+          <td><span class="badge badge-{{if .Fallback}}fallback{{else}}primary{{end}}">{{if .Fallback}}fallback{{else}}primary{{end}}</span></td>
+          <td class="mono">{{range .Args}}{{.}} {{end}}</td>
+          <td class="mono"><a class="table-link" href="/fetches/{{.Hash}}">{{shortHash .Hash}}</a></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="6" class="empty-state">No fetches recorded yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
 </div>
 `
 
 const fetchDetailBodyHTML = `
-<a href="/fetches" class="back-link">&larr; Back to fetches</a>
-
-<div class="page-header">
+<div class="page-header" style="margin-bottom: 1rem;">
   <div>
-    <h1 class="page-title">Fetch Details</h1>
+    <a href="/fetches" class="back-link">&larr; Back to fetches</a>
+    <h1 class="page-title">Fetch details</h1>
     <p class="page-subtitle">Preserved record with content hash and execution arguments.</p>
   </div>
-  <div style="display: flex; gap: 0.5rem; align-items: center;">
+  <div class="page-header-actions">
     <span class="badge badge-{{if .IsFallback}}fallback{{else}}primary{{end}}">{{if .IsFallback}}fallback{{else}}primary{{end}}</span>
     <span class="badge badge-subtle mono">#{{shortHash .Hash}}</span>
+    <a href="/verifications" class="btn btn-primary">Audit verification</a>
   </div>
 </div>
 
@@ -1017,16 +1234,16 @@ const fetchDetailBodyHTML = `
   <div class="detail-label">Backend</div>
   <div class="detail-value mono">{{.Backend}} ({{if .IsFallback}}fallback{{else}}primary{{end}})</div>
 
-  <div class="detail-label">Backend Status</div>
+  <div class="detail-label">Backend status</div>
   <div class="detail-value mono">{{.Status}}</div>
 
-  <div class="detail-label">Recorded Arguments</div>
+  <div class="detail-label">Recorded arguments</div>
   <div class="detail-value mono">{{range .Args}}{{.}} {{else}}&mdash;{{end}}</div>
 
   <div class="detail-label">Content SHA-256</div>
   <div class="detail-value mono">{{.Hash}}</div>
 
-  <div class="detail-label">Record Hash</div>
+  <div class="detail-label">Record hash</div>
   <div class="detail-value mono">{{.RecordHash}}</div>
 
   <div class="detail-label">Timestamp (UTC)</div>
@@ -1046,36 +1263,43 @@ const verificationsBodyHTML = `
     <h1 class="page-title">Verifications</h1>
     <p class="page-subtitle">Full record of verification checks against preserved evidence ({{.VerifyTotal}} total).</p>
   </div>
+  <div class="page-header-actions">
+    <a href="/sources" class="btn btn-primary">Monitor sources</a>
+  </div>
 </div>
 
 <div class="card">
-  <table>
-    <thead><tr><th>Time (UTC)</th><th>State</th><th>Resolved URL</th><th>Observation Record</th></tr></thead>
-    <tbody>
-      {{range .Verifications}}
-      <tr>
-        <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{formatTime .Timestamp}}</a></td>
-        <td><span class="badge badge-{{.State}}">{{.State}}</span></td>
-        <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{.ResolvedURL}}</a></td>
-        <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{shortHash .ObservationHash}}</a></td>
-      </tr>
-      {{else}}
-      <tr><td colspan="4" class="empty-state">No verifications recorded yet.</td></tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time (UTC)</th><th>State</th><th>Resolved URL</th><th>Observation record</th></tr></thead>
+      <tbody>
+        {{range .Verifications}}
+        <tr>
+          <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{formatTime .Timestamp}}</a></td>
+          <td><span class="badge badge-{{.State}}">{{.State}}</span></td>
+          <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{.ResolvedURL}}</a></td>
+          <td class="mono"><a class="table-link" href="/verifications/{{.ObservationHash}}">{{shortHash .ObservationHash}}</a></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="4" class="empty-state">No verifications recorded yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
 </div>
 `
 
 const verificationDetailBodyHTML = `
-<a href="/verifications" class="back-link">&larr; Back to verifications</a>
-
-<div class="page-header">
+<div class="page-header" style="margin-bottom: 1rem;">
   <div>
-    <h1 class="page-title">Verification Result</h1>
+    <a href="/verifications" class="back-link">&larr; Back to verifications</a>
+    <h1 class="page-title">Verification result</h1>
     <p class="page-subtitle">Re-fetch comparison against the append-only evidence record.</p>
   </div>
-  <div class="quote-pill">"Same URL. Different story."</div>
+  <div class="page-header-actions">
+    <div class="quote-pill">"Same URL. Different story."</div>
+    <a href="/sources" class="btn btn-primary">Check source health</a>
+  </div>
 </div>
 
 <div class="detail-grid">
@@ -1085,17 +1309,17 @@ const verificationDetailBodyHTML = `
   <div class="detail-label">Resolved URL</div>
   <div class="detail-value mono">{{.ResolvedURL}}</div>
 
-  <div class="detail-label">Observation Record Hash</div>
+  <div class="detail-label">Observation record hash</div>
   <div class="detail-value mono">{{.ObservationHash}}</div>
 
-  <div class="detail-label">Verified At (UTC)</div>
+  <div class="detail-label">Verified at (UTC)</div>
   <div class="detail-value">{{formatTime .Timestamp}}</div>
 </div>
 
 {{if and (eq .State "changed") .Diff}}
 <div class="diff-container">
   <div class="diff-header-bar">
-    <span>What Changed</span>
+    <span>What changed</span>
   </div>
   <div class="diff-view mono">
     {{range .DiffLines}}
@@ -1118,8 +1342,11 @@ const sourcesBodyHTML = `
     <h1 class="page-title">Sources</h1>
     <p class="page-subtitle">Live status and failover health of all registered backends ({{len .Statuses}} monitored).</p>
   </div>
-  <div style="font-size: 0.85rem; color: #64748b;">
-    {{.HealthyCount}} healthy &middot; {{.DegradedCount}} degraded &middot; {{.DownCount}} down
+  <div class="page-header-actions">
+    <span class="mono" style="font-size: var(--fs-xs); color: var(--mut);">
+      {{.HealthyCount}} healthy &middot; {{.DegradedCount}} degraded &middot; {{.DownCount}} down
+    </span>
+    <a href="/" class="btn btn-primary">Return to overview</a>
   </div>
 </div>
 
@@ -1128,7 +1355,7 @@ const sourcesBodyHTML = `
   <div class="source-card" data-source="{{.Source}}" data-state="{{.State}}">
     <div class="source-card-header">
       <div class="source-info">
-        <span class="source-avatar" style="background-color: {{avatarBg .Source}};">{{initial .Source}}</span>
+        <span class="source-avatar">{{initial .Source}}</span>
         <span class="source-name mono" data-source="{{.Source}}">{{.Source}}</span>
       </div>
       <span class="badge badge-{{.State}}" data-state="{{.State}}">{{.State}}</span>
@@ -1147,12 +1374,12 @@ const sourcesBodyHTML = `
     </div>
     {{if .Reports}}
     <div class="source-reports">
-      <div style="font-weight: 600; margin-bottom: 0.25rem; color: #475569;">Backends:</div>
+      <div style="font-weight: 600; margin-bottom: 0.25rem; color: var(--mut);">Backends:</div>
       {{range .Reports}}
       <div class="report-item">
         <span class="report-name mono">{{.BackendName}}</span>:
         <span class="badge badge-{{if eq .Status "reachable"}}healthy{{else}}down{{end}}">{{.Status}}</span>
-        {{if .DetectedVersion}}<span class="mono" style="color: #64748b;">({{.DetectedVersion}})</span>{{end}}
+        {{if .DetectedVersion}}<span class="mono" style="color: var(--mut);">({{.DetectedVersion}})</span>{{end}}
       </div>
       {{end}}
     </div>
